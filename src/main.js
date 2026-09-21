@@ -28,6 +28,22 @@ function randomSeedValue() {
   return Math.random() * 1000 - 500;
 }
 
+// Accepts "#rgb", "rgb", "#rrggbb" or "rrggbb" (any case) and returns a
+// normalized "#rrggbb", or null if the string isn't a valid hex color
+// yet — used to validate the color list's hex text inputs without
+// fighting the user mid-keystroke (a partial string like "#04" is
+// simply not applied, not treated as an error).
+function normalizeHex(value) {
+  const trimmed = value.trim().replace(/^#/, '');
+  if (/^[0-9a-fA-F]{6}$/.test(trimmed)) {
+    return `#${trimmed.toLowerCase()}`;
+  }
+  if (/^[0-9a-fA-F]{3}$/.test(trimmed)) {
+    return `#${trimmed.toLowerCase().split('').map((c) => c + c).join('')}`;
+  }
+  return null;
+}
+
 // The noise's frame-to-frame change saturates fast as the sampling
 // radius grows (past ~0.4 it's already near-maximally decorrelated),
 // so a linear slider would spend most of its range feeling identical.
@@ -129,15 +145,40 @@ function renderColorList() {
   state.colors.forEach((color, index) => {
     const node = colorRowTemplate.content.firstElementChild.cloneNode(true);
     const input = node.querySelector('.color-input');
+    const hexInput = node.querySelector('.color-hex');
     input.value = color;
+    hexInput.value = color;
     input.addEventListener('input', () => {
       state.colors[index] = input.value;
+      hexInput.value = input.value;
     });
     // Commit to history only once the picker closes (or the field
     // loses focus), not on every intermediate drag tick.
     input.addEventListener('change', () => {
       pushColorHistory();
     });
+
+    // Typing a hex code is the other way to set a color: apply it live
+    // as soon as it's a complete, valid hex string (so a partial string
+    // like "#04" is just left alone, not rejected), and commit to
+    // history + revert an invalid final value on blur/Enter, mirroring
+    // how the native picker above commits on 'change'.
+    hexInput.addEventListener('input', () => {
+      const normalized = normalizeHex(hexInput.value);
+      if (!normalized) return;
+      state.colors[index] = normalized;
+      input.value = normalized;
+    });
+    hexInput.addEventListener('change', () => {
+      const normalized = normalizeHex(hexInput.value);
+      if (normalized) {
+        hexInput.value = normalized;
+        pushColorHistory();
+      } else {
+        hexInput.value = state.colors[index];
+      }
+    });
+    hexInput.addEventListener('focus', () => hexInput.select());
     const removeBtn = node.querySelector('.remove-color');
     removeBtn.disabled = state.colors.length <= 2;
     removeBtn.addEventListener('click', () => {
