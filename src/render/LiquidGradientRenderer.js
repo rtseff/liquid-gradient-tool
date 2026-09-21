@@ -67,11 +67,6 @@ export class LiquidGradientRenderer {
       colorCount: gl.getUniformLocation(program, 'u_colorCount'),
       colors: gl.getUniformLocation(program, 'u_colors'),
       stops: gl.getUniformLocation(program, 'u_stops'),
-      glassEnabled: gl.getUniformLocation(program, 'u_glassEnabled'),
-      glassSpecular: gl.getUniformLocation(program, 'u_glassSpecular'),
-      glassFresnel: gl.getUniformLocation(program, 'u_glassFresnel'),
-      glassContrast: gl.getUniformLocation(program, 'u_glassContrast'),
-      glassAngle: gl.getUniformLocation(program, 'u_glassAngle'),
     };
 
     // A 1x1 opaque-white placeholder keeps the sampler valid (and the
@@ -125,11 +120,6 @@ export class LiquidGradientRenderer {
    * @param {'none'|'circle'|'custom'} params.maskMode
    * @param {boolean} params.maskInvert
    * @param {string} params.bgColor hex color used outside the mask
-   * @param {boolean} [params.glassEnabled] overlay glossy sphere lighting (specular + Fresnel rim), independent of maskMode
-   * @param {number} [params.glassSpecular] 0..1
-   * @param {number} [params.glassFresnel] 0..1
-   * @param {number} [params.glassContrast] 0..1
-   * @param {number} [params.glassAngleRad] radians
    * @param {number} phase 0..1, position within the seamless loop
    */
   render(params, phase) {
@@ -168,12 +158,6 @@ export class LiquidGradientRenderer {
     gl.uniform1i(this.uniforms.colorCount, colorCount);
     gl.uniform3fv(this.uniforms.colors, colorFloats);
     gl.uniform1fv(this.uniforms.stops, stopFloats);
-
-    gl.uniform1f(this.uniforms.glassEnabled, params.glassEnabled ? 1 : 0);
-    gl.uniform1f(this.uniforms.glassSpecular, params.glassSpecular ?? 0.6);
-    gl.uniform1f(this.uniforms.glassFresnel, params.glassFresnel ?? 0.5);
-    gl.uniform1f(this.uniforms.glassContrast, params.glassContrast ?? 0.6);
-    gl.uniform1f(this.uniforms.glassAngle, params.glassAngleRad ?? Math.PI / 2);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

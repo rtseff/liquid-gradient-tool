@@ -17,11 +17,6 @@ const state = {
   maskInvert: false,
   maskImage: null,
   bgColor: '#000000',
-  glassEnabled: false,
-  glassSpecular: 0.6,
-  glassFresnel: 0.5,
-  glassContrast: 0.6,
-  glassAngle: 100, // degrees
   width: 1600,
   height: 900,
   duration: 4,
@@ -70,16 +65,6 @@ const el = {
   maskHint: document.getElementById('maskHint'),
   bgColorField: document.getElementById('bgColorField'),
   bgColor: document.getElementById('bgColor'),
-  glassEnabled: document.getElementById('glassEnabled'),
-  glassControls: document.getElementById('glassControls'),
-  glassSpecular: document.getElementById('glassSpecular'),
-  glassSpecularOut: document.getElementById('glassSpecularOut'),
-  glassFresnel: document.getElementById('glassFresnel'),
-  glassFresnelOut: document.getElementById('glassFresnelOut'),
-  glassContrast: document.getElementById('glassContrast'),
-  glassContrastOut: document.getElementById('glassContrastOut'),
-  glassAngle: document.getElementById('glassAngle'),
-  glassAngleOut: document.getElementById('glassAngleOut'),
   resolutionPreset: document.getElementById('resolutionPreset'),
   customSizeRow: document.getElementById('customSizeRow'),
   customWidth: document.getElementById('customWidth'),
@@ -277,18 +262,6 @@ el.maskInvert.addEventListener('change', () => {
 
 updateMaskUi();
 
-// --- Glass ------------------------------------------------------------
-
-el.glassEnabled.addEventListener('change', () => {
-  state.glassEnabled = el.glassEnabled.checked;
-  el.glassControls.hidden = !state.glassEnabled;
-});
-
-bindRange(el.glassSpecular, el.glassSpecularOut, 'glassSpecular');
-bindRange(el.glassFresnel, el.glassFresnelOut, 'glassFresnel');
-bindRange(el.glassContrast, el.glassContrastOut, 'glassContrast');
-bindRange(el.glassAngle, el.glassAngleOut, 'glassAngle', (v) => `${Math.round(v)}°`);
-
 el.bgColor.value = state.bgColor;
 el.bgColor.addEventListener('input', () => {
   state.bgColor = el.bgColor.value;
@@ -342,11 +315,6 @@ function currentParams() {
     maskMode: state.maskMode,
     maskInvert: state.maskInvert,
     bgColor: state.bgColor,
-    glassEnabled: state.glassEnabled,
-    glassSpecular: state.glassSpecular,
-    glassFresnel: state.glassFresnel,
-    glassContrast: state.glassContrast,
-    glassAngleRad: (state.glassAngle * Math.PI) / 180,
   };
 }
 

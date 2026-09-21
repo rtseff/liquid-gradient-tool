@@ -127,23 +127,3 @@ distance-field mask, no texture involved. `'custom'` samples
 fill the canvas with no aspect-ratio correction. Both non-`'none'`
 modes blend the gradient against `state.bgColor` via `mix()`, and both
 support `state.maskInvert`.
-
-### Glass mode
-
-`state.glassEnabled` (+ `glassSpecular`/`glassFresnel`/`glassContrast`/
-`glassAngle`) turns on a "liquid glass sphere" overlay: a fake normal
-for a sphere inscribed in the canvas (same `r = length(uv-0.5, aspect-
-corrected) * 2` convention as the circle mask, so `r = 1` at the
-silhouette) drives a Blinn-Phong specular highlight, a Fresnel rim glow,
-and a diffuse light/dark hemisphere split, all computed in the fragment
-shader after the mask blend (end of `main()` in `shaders.js`). It is
-**completely independent of `maskMode`** — glass lights the whole frame
-regardless of what shape the mask cropped, fading its own influence to
-zero past the sphere's silhouette (`sphereFade`/`rimFade`) rather than
-hard-clipping — so combine it with the `'circle'` mask (as the UI hint
-says) if you want the background outside the sphere actually cropped
-away, not just unlit. All of its inputs (light angle, intensities) are
-static UI parameters, never derived from `phase`, so it cannot break
-the seamless-loop invariant above — verified with the same
-`phase=0.0` vs `phase=1.0` pixel-readback check with `glassEnabled:
-true`.
