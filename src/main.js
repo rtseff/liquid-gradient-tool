@@ -13,7 +13,9 @@ const state = {
   softness: 0.3,
   speed: 0.5, // raw slider value 0..1, eased into an amplitude via speedToAmplitude()
   seed: [randomSeedValue(), randomSeedValue()],
-  circleMask: false,
+  maskMode: 'none', // 'none' | 'circle' | 'custom'
+  maskInvert: false,
+  maskImage: null,
   bgColor: '#000000',
   width: 1600,
   height: 900,
@@ -42,6 +44,8 @@ const el = {
   colorList: document.getElementById('colorList'),
   addColorBtn: document.getElementById('addColorBtn'),
   randomizeBtn: document.getElementById('randomizeBtn'),
+  undoColorBtn: document.getElementById('undoColorBtn'),
+  redoColorBtn: document.getElementById('redoColorBtn'),
   scale: document.getElementById('scale'),
   scaleOut: document.getElementById('scaleOut'),
   warp: document.getElementById('warp'),
@@ -50,7 +54,15 @@ const el = {
   softnessOut: document.getElementById('softnessOut'),
   speed: document.getElementById('speed'),
   speedOut: document.getElementById('speedOut'),
-  circleMask: document.getElementById('circleMask'),
+  maskMode: document.getElementById('maskMode'),
+  maskUploadRow: document.getElementById('maskUploadRow'),
+  maskFileInput: document.getElementById('maskFileInput'),
+  maskPreviewRow: document.getElementById('maskPreviewRow'),
+  maskPreviewImg: document.getElementById('maskPreviewImg'),
+  clearMaskBtn: document.getElementById('clearMaskBtn'),
+  maskInvertField: document.getElementById('maskInvertField'),
+  maskInvert: document.getElementById('maskInvert'),
+  maskHint: document.getElementById('maskHint'),
   bgColorField: document.getElementById('bgColorField'),
   bgColor: document.getElementById('bgColor'),
   resolutionPreset: document.getElementById('resolutionPreset'),
@@ -83,12 +95,34 @@ PRESETS.forEach((preset) => {
   btn.innerHTML = `<span>${preset.name}</span>`;
   btn.addEventListener('click', () => {
     state.colors = [...preset.colors];
+    pushColorHistory();
     renderColorList();
   });
   el.presetList.appendChild(btn);
 });
 
 // --- Colors ------------------------------------------------------------
+//
+// Every add/remove/edit of the palette is pushed onto an undo/redo
+// history stack (snapshots of state.colors), so mistakes made while
+// experimenting with a palette are cheap to back out of.
+
+const colorHistory = [[...state.colors]];
+let colorHistoryIndex = 0;
+
+function updateHistoryButtons() {
+  el.undoColorBtn.disabled = colorHistoryIndex <= 0;
+  el.redoColorBtn.disabled = colorHistoryIndex >= colorHistory.length - 1;
+}
+
+function pushColorHistory() {
+  // Adding a new entry after undoing discards the redo branch, same as
+  // any standard undo stack.
+  colorHistory.length = colorHistoryIndex + 1;
+  colorHistory.push([...state.colors]);
+  colorHistoryIndex++;
+  updateHistoryButtons();
+}
 
 function renderColorList() {
   el.colorList.innerHTML = '';
@@ -99,11 +133,17 @@ function renderColorList() {
     input.addEventListener('input', () => {
       state.colors[index] = input.value;
     });
+    // Commit to history only once the picker closes (or the field
+    // loses focus), not on every intermediate drag tick.
+    input.addEventListener('change', () => {
+      pushColorHistory();
+    });
     const removeBtn = node.querySelector('.remove-color');
     removeBtn.disabled = state.colors.length <= 2;
     removeBtn.addEventListener('click', () => {
       if (state.colors.length <= 2) return;
       state.colors.splice(index, 1);
+      pushColorHistory();
       renderColorList();
     });
     el.colorList.appendChild(node);
@@ -114,7 +154,34 @@ el.addColorBtn.addEventListener('click', () => {
   if (state.colors.length >= 6) return;
   const last = state.colors[state.colors.length - 1] || '#ffffff';
   state.colors.push(last);
+  pushColorHistory();
   renderColorList();
+});
+
+el.undoColorBtn.addEventListener('click', () => {
+  if (colorHistoryIndex <= 0) return;
+  colorHistoryIndex--;
+  state.colors = [...colorHistory[colorHistoryIndex]];
+  updateHistoryButtons();
+  renderColorList();
+});
+
+el.redoColorBtn.addEventListener('click', () => {
+  if (colorHistoryIndex >= colorHistory.length - 1) return;
+  colorHistoryIndex++;
+  state.colors = [...colorHistory[colorHistoryIndex]];
+  updateHistoryButtons();
+  renderColorList();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+  e.preventDefault();
+  if (e.shiftKey) {
+    el.redoColorBtn.click();
+  } else {
+    el.undoColorBtn.click();
+  }
 });
 
 el.randomizeBtn.addEventListener('click', () => {
@@ -122,6 +189,7 @@ el.randomizeBtn.addEventListener('click', () => {
 });
 
 renderColorList();
+updateHistoryButtons();
 
 // --- Shape sliders -------------------------------------------------------
 
@@ -147,10 +215,52 @@ el.gifWidth.addEventListener('input', () => {
   el.gifWidthOut.textContent = `${state.gifWidth}px`;
 });
 
-el.circleMask.addEventListener('change', () => {
-  state.circleMask = el.circleMask.checked;
-  el.bgColorField.hidden = !state.circleMask;
+// --- Mask ------------------------------------------------------------
+
+function updateMaskUi() {
+  const mode = state.maskMode;
+  el.maskUploadRow.hidden = mode !== 'custom';
+  el.maskPreviewRow.hidden = !(mode === 'custom' && state.maskImage);
+  el.maskInvertField.hidden = mode === 'none';
+  el.bgColorField.hidden = mode === 'none';
+  el.maskHint.hidden = mode !== 'custom';
+}
+
+el.maskMode.addEventListener('change', () => {
+  state.maskMode = el.maskMode.value;
+  updateMaskUi();
 });
+
+el.maskFileInput.addEventListener('change', () => {
+  const file = el.maskFileInput.files?.[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const image = new Image();
+  image.onload = () => {
+    state.maskImage = image;
+    renderer.setMaskImage(image);
+    el.maskPreviewImg.src = url;
+    updateMaskUi();
+  };
+  image.onerror = () => {
+    alert('Не удалось загрузить изображение маски.');
+    URL.revokeObjectURL(url);
+  };
+  image.src = url;
+});
+
+el.clearMaskBtn.addEventListener('click', () => {
+  state.maskImage = null;
+  el.maskFileInput.value = '';
+  el.maskPreviewImg.src = '';
+  updateMaskUi();
+});
+
+el.maskInvert.addEventListener('change', () => {
+  state.maskInvert = el.maskInvert.checked;
+});
+
+updateMaskUi();
 
 el.bgColor.value = state.bgColor;
 el.bgColor.addEventListener('input', () => {
@@ -202,7 +312,8 @@ function currentParams() {
     loops: 1,
     speed: speedToAmplitude(state.speed),
     seed: state.seed,
-    circleMask: state.circleMask,
+    maskMode: state.maskMode,
+    maskInvert: state.maskInvert,
     bgColor: state.bgColor,
   };
 }

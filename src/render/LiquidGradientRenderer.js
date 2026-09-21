@@ -60,12 +60,43 @@ export class LiquidGradientRenderer {
       warp: gl.getUniformLocation(program, 'u_warp'),
       softness: gl.getUniformLocation(program, 'u_softness'),
       seed: gl.getUniformLocation(program, 'u_seed'),
-      circleMask: gl.getUniformLocation(program, 'u_circleMask'),
+      maskMode: gl.getUniformLocation(program, 'u_maskMode'),
+      maskInvert: gl.getUniformLocation(program, 'u_maskInvert'),
+      maskTex: gl.getUniformLocation(program, 'u_maskTex'),
       bgColor: gl.getUniformLocation(program, 'u_bgColor'),
       colorCount: gl.getUniformLocation(program, 'u_colorCount'),
       colors: gl.getUniformLocation(program, 'u_colors'),
       stops: gl.getUniformLocation(program, 'u_stops'),
     };
+
+    // A 1x1 opaque-white placeholder keeps the sampler valid (and the
+    // "custom" mask mode a no-op, fully visible) before the user has
+    // uploaded an image.
+    this.maskTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.maskTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  }
+
+  /**
+   * Uploads a user-supplied mask image (any HTMLImageElement/ImageBitmap).
+   * Its luminance × alpha is sampled per pixel and used to blend between
+   * the gradient and the background color, replacing the built-in circle
+   * mask with an arbitrary shape.
+   */
+  setMaskImage(image) {
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.maskTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
   setSize(width, height) {
@@ -86,14 +117,19 @@ export class LiquidGradientRenderer {
    * @param {number} params.loops integer noise revolutions per full loop (keep at 1 unless you want busier motion)
    * @param {number} params.speed 0..1, how far the pattern travels per loop — the actual "fast/slow" control
    * @param {[number, number]} params.seed
-   * @param {boolean} params.circleMask
-   * @param {string} params.bgColor hex color used outside the circle mask
+   * @param {'none'|'circle'|'custom'} params.maskMode
+   * @param {boolean} params.maskInvert
+   * @param {string} params.bgColor hex color used outside the mask
    * @param {number} phase 0..1, position within the seamless loop
    */
   render(params, phase) {
     const gl = this.gl;
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.maskTexture);
+    gl.uniform1i(this.uniforms.maskTex, 0);
 
     const colorCount = Math.min(params.colors.length, MAX_COLORS);
     const colorFloats = new Float32Array(MAX_COLORS * 3);
@@ -114,7 +150,9 @@ export class LiquidGradientRenderer {
     gl.uniform1f(this.uniforms.warp, params.warp);
     gl.uniform1f(this.uniforms.softness, params.softness);
     gl.uniform2f(this.uniforms.seed, params.seed[0], params.seed[1]);
-    gl.uniform1f(this.uniforms.circleMask, params.circleMask ? 1 : 0);
+    const maskModeIndex = { none: 0, circle: 1, custom: 2 }[params.maskMode] ?? 0;
+    gl.uniform1f(this.uniforms.maskMode, maskModeIndex);
+    gl.uniform1f(this.uniforms.maskInvert, params.maskInvert ? 1 : 0);
     const [br, bg, bb] = hexToRgb01(params.bgColor || '#000000');
     gl.uniform3f(this.uniforms.bgColor, br, bg, bb);
     gl.uniform1i(this.uniforms.colorCount, colorCount);

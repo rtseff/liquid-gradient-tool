@@ -27,6 +27,10 @@
           <h2>Цвета</h2>
           <div id="colorList" class="color-list"></div>
           <div class="row">
+            <button id="undoColorBtn" class="btn btn-secondary" type="button" title="Отменить (Ctrl+Z)" disabled>↶ Отменить</button>
+            <button id="redoColorBtn" class="btn btn-secondary" type="button" title="Повторить (Ctrl+Shift+Z)" disabled>↷ Повторить</button>
+          </div>
+          <div class="row">
             <button id="addColorBtn" class="btn btn-secondary" type="button">+ Цвет</button>
             <button id="randomizeBtn" class="btn btn-secondary" type="button">🎲 Случайно</button>
           </div>
@@ -50,14 +54,39 @@
             <span>Скорость движения <output id="speedOut"></output></span>
             <input id="speed" type="range" min="0" max="1" step="0.01" />
           </label>
-          <label class="field checkbox-field">
-            <input id="circleMask" type="checkbox" />
-            <span>Маска-круг (как на референсе)</span>
+        </div>
+
+        <div class="control-group">
+          <h2>Маска</h2>
+          <select id="maskMode">
+            <option value="none">Без маски (прямоугольник)</option>
+            <option value="circle">Круг (как на референсе)</option>
+            <option value="custom">Своё изображение…</option>
+          </select>
+
+          <div id="maskUploadRow" class="row" hidden>
+            <input id="maskFileInput" type="file" accept="image/*" />
+          </div>
+
+          <div id="maskPreviewRow" class="row mask-preview-row" hidden>
+            <img id="maskPreviewImg" class="mask-preview" alt="Превью маски" />
+            <button id="clearMaskBtn" class="btn-icon remove-color" type="button" title="Убрать изображение">✕</button>
+          </div>
+
+          <label class="field checkbox-field" id="maskInvertField" hidden>
+            <input id="maskInvert" type="checkbox" />
+            <span>Инвертировать маску</span>
           </label>
+
           <label class="field" id="bgColorField" hidden>
-            <span>Цвет фона вне круга</span>
+            <span>Цвет фона вне маски</span>
             <input id="bgColor" type="color" />
           </label>
+
+          <p class="hint" id="maskHint" hidden>
+            Маска растягивается на весь холст. Светлые/непрозрачные области
+            изображения показывают градиент, тёмные/прозрачные — цвет фона.
+          </p>
         </div>
 
         <div class="control-group">
