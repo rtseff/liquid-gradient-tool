@@ -146,6 +146,39 @@ function renderColorList() {
       pushColorHistory();
       renderColorList();
     });
+
+    // Drag-and-drop reordering. The drag itself only ever starts from
+    // the handle (not the color swatch or remove button, both of which
+    // need ordinary clicks to keep working), but the whole row is a
+    // drop target so dropping anywhere on it reorders.
+    const handle = node.querySelector('.drag-handle');
+    handle.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(index));
+      node.classList.add('dragging');
+    });
+    handle.addEventListener('dragend', () => {
+      node.classList.remove('dragging');
+    });
+    node.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      node.classList.add('drag-over');
+    });
+    node.addEventListener('dragleave', () => {
+      node.classList.remove('drag-over');
+    });
+    node.addEventListener('drop', (e) => {
+      e.preventDefault();
+      node.classList.remove('drag-over');
+      const fromIndex = Number(e.dataTransfer.getData('text/plain'));
+      if (Number.isNaN(fromIndex) || fromIndex === index) return;
+      const [moved] = state.colors.splice(fromIndex, 1);
+      state.colors.splice(index, 0, moved);
+      pushColorHistory();
+      renderColorList();
+    });
+
     el.colorList.appendChild(node);
   });
 }

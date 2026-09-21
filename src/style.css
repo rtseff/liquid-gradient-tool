@@ -237,6 +237,29 @@ output {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 8px;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+
+.color-row.dragging {
+  opacity: 0.4;
+}
+
+.color-row.drag-over {
+  border-color: var(--accent);
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 2px;
+  user-select: none;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 select {
