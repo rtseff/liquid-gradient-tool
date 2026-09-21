@@ -134,6 +134,11 @@ uniform vec3 u_bgColor;
 uniform int u_colorCount;
 uniform vec3 u_colors[${MAX_COLORS}];
 uniform float u_stops[${MAX_COLORS}];
+uniform float u_glassEnabled;
+uniform float u_glassSpecular;  // 0..1, brightness of the glossy highlight
+uniform float u_glassFresnel;   // 0..1, brightness of the rim glow
+uniform float u_glassContrast;  // 0..1, how strongly the lit/unlit hemispheres separate
+uniform float u_glassAngle;     // radians, azimuth of the light source
 
 out vec4 fragColor;
 
@@ -169,8 +174,9 @@ float fbm(vec2 p, vec2 offset, float phase, float loops, float amplitude) {
 
 void main() {
   vec2 uv = gl_FragCoord.xy / u_resolution;
+  float aspect = u_resolution.x / u_resolution.y;
   vec2 p = uv - 0.5;
-  p.x *= u_resolution.x / u_resolution.y;
+  p.x *= aspect;
   p = p * u_scale + 0.5;
 
   vec2 q = vec2(
@@ -206,11 +212,43 @@ void main() {
     color = mix(u_bgColor, color, inside);
   } else if (u_maskMode > 0.5) {
     vec2 c = uv - 0.5;
-    c.x *= u_resolution.x / u_resolution.y;
+    c.x *= aspect;
     float d = length(c) * 2.0;
     float inside = 1.0 - smoothstep(0.96, 1.0, d);
     if (u_maskInvert > 0.5) inside = 1.0 - inside;
     color = mix(u_bgColor, color, inside);
+  }
+
+  // "Glass" mode: a fully time-invariant lighting overlay (no u_phase
+  // involved anywhere below), so it can never affect the seamless-loop
+  // guarantee — it just re-lights whatever color the noise field
+  // produced for this frame as if it sat inside a glass sphere inscribed
+  // in the canvas (same radius convention as the circle mask above:
+  // r = 1 at the sphere's silhouette). Independent of mask mode, since
+  // the reference "liquid glass" look is a lit blob, not a crop shape.
+  if (u_glassEnabled > 0.5) {
+    vec2 gc = uv - 0.5;
+    gc.x *= aspect;
+    float r2 = dot(gc, gc) * 4.0;
+    vec3 normal = normalize(vec3(gc.x * 2.0, gc.y * 2.0, sqrt(max(0.0, 1.0 - r2))));
+
+    vec3 lightDir = normalize(vec3(cos(u_glassAngle), sin(u_glassAngle), 0.7));
+    vec3 viewDir = vec3(0.0, 0.0, 1.0);
+    vec3 halfDir = normalize(lightDir + viewDir);
+
+    float diffuse = max(dot(normal, lightDir), 0.0);
+    float ndv = max(dot(normal, viewDir), 0.0);
+    float fresnel = pow(1.0 - ndv, 3.0);
+    float specular = pow(max(dot(normal, halfDir), 0.0), 60.0);
+
+    float r = sqrt(r2);
+    float sphereFade = 1.0 - smoothstep(0.9, 1.05, r);
+    float rimFade = smoothstep(0.55, 1.0, r) * (1.0 - smoothstep(1.0, 1.25, r));
+
+    float shade = mix(1.0, mix(0.25, 1.2, diffuse), u_glassContrast * sphereFade);
+    color *= shade;
+    color += specular * u_glassSpecular * sphereFade;
+    color += fresnel * u_glassFresnel * rimFade;
   }
 
   fragColor = vec4(color, 1.0);

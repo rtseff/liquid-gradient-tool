@@ -90,6 +90,38 @@
         </div>
 
         <div class="control-group">
+          <h2>Стекло</h2>
+          <label class="field checkbox-field">
+            <input id="glassEnabled" type="checkbox" />
+            <span>Стеклянный жидкий шар (как на референсе)</span>
+          </label>
+
+          <div id="glassControls" hidden>
+            <label class="field">
+              <span>Блик (глянец) <output id="glassSpecularOut"></output></span>
+              <input id="glassSpecular" type="range" min="0" max="1" step="0.01" />
+            </label>
+            <label class="field">
+              <span>Кромка (Fresnel) <output id="glassFresnelOut"></output></span>
+              <input id="glassFresnel" type="range" min="0" max="1" step="0.01" />
+            </label>
+            <label class="field">
+              <span>Контраст света/тени <output id="glassContrastOut"></output></span>
+              <input id="glassContrast" type="range" min="0" max="1" step="0.01" />
+            </label>
+            <label class="field">
+              <span>Угол света <output id="glassAngleOut"></output></span>
+              <input id="glassAngle" type="range" min="0" max="360" step="1" />
+            </label>
+            <p class="hint">
+              Накладывает сферическое освещение (блик + светящийся ободок)
+              поверх жидкого узора — независимо от маски. Хорошо сочетается
+              с маской «Круг» для точной обрезки по силуэту шара.
+            </p>
+          </div>
+        </div>
+
+        <div class="control-group">
           <h2>Разрешение</h2>
           <select id="resolutionPreset">
             <option value="1920x1080">Hero 1920×1080 (16:9)</option>
