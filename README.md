@@ -1,4 +1,4 @@
-# Liquid Gradient Studio
+# Liquid Gradient Tool
 
 Инструмент для создания анимированных «жидких» градиентов (liquid /
 mesh gradients) с бесшовным зацикливанием и экспортом в **WebM** и
