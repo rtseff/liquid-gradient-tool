@@ -122,6 +122,7 @@ precision highp float;
 uniform vec2 u_resolution;
 uniform float u_phase;   // loop position, 0..1 (wraps back to 0)
 uniform float u_loops;   // integer number of noise revolutions per loop
+uniform float u_amplitude; // 0..1, how far the pattern travels per loop (0 = frozen, 1 = full motion) — this is what the "speed" slider actually controls
 uniform float u_scale;
 uniform float u_warp;
 uniform float u_softness;
@@ -139,21 +140,24 @@ ${SIMPLEX_4D}
 // Sampling noise along a circle in the w/z plane makes the animation
 // close perfectly on itself: phase 0.0 and phase 1.0 map to the same
 // point on the circle, so frame 0 and the last frame are identical
-// neighbours instead of a visible jump cut.
-vec2 loopCircle(float phase, float loops) {
+// neighbours instead of a visible jump cut. This holds for ANY radius
+// (u_amplitude), not just integer ones — shrinking the radius just
+// makes the traversed arc of noise-space shorter, which is what reads
+// as "slower" motion, without ever breaking the closure.
+vec2 loopCircle(float phase, float loops, float amplitude) {
   float a = phase * 6.283185307179586 * loops;
-  return vec2(cos(a), sin(a));
+  return vec2(cos(a), sin(a)) * amplitude;
 }
 
 // Only 3 octaves: liquid-gradient hero backgrounds read best as soft,
 // large color blobs, not fine marbled texture, so we deliberately skip
 // the higher-frequency detail a full fbm would add.
-float fbm(vec2 p, vec2 offset, float phase, float loops) {
+float fbm(vec2 p, vec2 offset, float phase, float loops, float amplitude) {
   float value = 0.0;
   float amp = 0.6;
   float freq = 1.0;
   for (int i = 0; i < 3; i++) {
-    vec2 circle = loopCircle(phase, loops) * freq;
+    vec2 circle = loopCircle(phase, loops, amplitude) * freq;
     value += amp * snoise(vec4((p + offset) * freq, circle));
     freq *= 1.8;
     amp *= 0.5;
@@ -168,16 +172,16 @@ void main() {
   p = p * u_scale + 0.5;
 
   vec2 q = vec2(
-    fbm(p, u_seed, u_phase, u_loops),
-    fbm(p, u_seed + vec2(5.2, 1.3), u_phase, u_loops)
+    fbm(p, u_seed, u_phase, u_loops, u_amplitude),
+    fbm(p, u_seed + vec2(5.2, 1.3), u_phase, u_loops, u_amplitude)
   );
 
   vec2 r = vec2(
-    fbm(p + u_warp * q, u_seed + vec2(8.3, 2.8), u_phase, u_loops),
-    fbm(p + u_warp * q, u_seed + vec2(1.7, 9.2), u_phase, u_loops)
+    fbm(p + u_warp * q, u_seed + vec2(8.3, 2.8), u_phase, u_loops, u_amplitude),
+    fbm(p + u_warp * q, u_seed + vec2(1.7, 9.2), u_phase, u_loops, u_amplitude)
   );
 
-  float field = fbm(p + u_warp * r, u_seed, u_phase, u_loops);
+  float field = fbm(p + u_warp * r, u_seed, u_phase, u_loops, u_amplitude);
   field = clamp(field * 0.5 + 0.5, 0.0, 1.0);
   field = pow(field, mix(2.2, 0.45, u_softness));
 

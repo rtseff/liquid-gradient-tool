@@ -55,6 +55,7 @@ export class LiquidGradientRenderer {
       resolution: gl.getUniformLocation(program, 'u_resolution'),
       phase: gl.getUniformLocation(program, 'u_phase'),
       loops: gl.getUniformLocation(program, 'u_loops'),
+      amplitude: gl.getUniformLocation(program, 'u_amplitude'),
       scale: gl.getUniformLocation(program, 'u_scale'),
       warp: gl.getUniformLocation(program, 'u_warp'),
       softness: gl.getUniformLocation(program, 'u_softness'),
@@ -82,7 +83,8 @@ export class LiquidGradientRenderer {
    * @param {number} params.scale
    * @param {number} params.warp
    * @param {number} params.softness
-   * @param {number} params.loops integer noise revolutions per full loop
+   * @param {number} params.loops integer noise revolutions per full loop (keep at 1 unless you want busier motion)
+   * @param {number} params.speed 0..1, how far the pattern travels per loop — the actual "fast/slow" control
    * @param {[number, number]} params.seed
    * @param {boolean} params.circleMask
    * @param {string} params.bgColor hex color used outside the circle mask
@@ -107,6 +109,7 @@ export class LiquidGradientRenderer {
     gl.uniform2f(this.uniforms.resolution, this.canvas.width, this.canvas.height);
     gl.uniform1f(this.uniforms.phase, phase);
     gl.uniform1f(this.uniforms.loops, params.loops);
+    gl.uniform1f(this.uniforms.amplitude, params.speed);
     gl.uniform1f(this.uniforms.scale, params.scale);
     gl.uniform1f(this.uniforms.warp, params.warp);
     gl.uniform1f(this.uniforms.softness, params.softness);

@@ -11,7 +11,7 @@ const state = {
   scale: 1.3,
   warp: 0.9,
   softness: 0.3,
-  loops: 1,
+  speed: 0.5, // raw slider value 0..1, eased into an amplitude via speedToAmplitude()
   seed: [randomSeedValue(), randomSeedValue()],
   circleMask: false,
   bgColor: '#000000',
@@ -24,6 +24,15 @@ const state = {
 
 function randomSeedValue() {
   return Math.random() * 1000 - 500;
+}
+
+// The noise's frame-to-frame change saturates fast as the sampling
+// radius grows (past ~0.4 it's already near-maximally decorrelated),
+// so a linear slider would spend most of its range feeling identical.
+// Cubic easing spreads the perceptually useful "calm -> lively" range
+// across the whole slider while still hitting full speed at 100%.
+function speedToAmplitude(rawSpeed) {
+  return rawSpeed ** 3;
 }
 
 // --- DOM refs -------------------------------------------------------------
@@ -39,8 +48,8 @@ const el = {
   warpOut: document.getElementById('warpOut'),
   softness: document.getElementById('softness'),
   softnessOut: document.getElementById('softnessOut'),
-  loops: document.getElementById('loops'),
-  loopsOut: document.getElementById('loopsOut'),
+  speed: document.getElementById('speed'),
+  speedOut: document.getElementById('speedOut'),
   circleMask: document.getElementById('circleMask'),
   bgColorField: document.getElementById('bgColorField'),
   bgColor: document.getElementById('bgColor'),
@@ -128,7 +137,7 @@ function bindRange(input, output, key, format = (v) => v.toFixed(2)) {
 bindRange(el.scale, el.scaleOut, 'scale');
 bindRange(el.warp, el.warpOut, 'warp');
 bindRange(el.softness, el.softnessOut, 'softness');
-bindRange(el.loops, el.loopsOut, 'loops', (v) => String(v));
+bindRange(el.speed, el.speedOut, 'speed', (v) => `${Math.round(v * 100)}%`);
 bindRange(el.duration, el.durationOut, 'duration', (v) => `${v.toFixed(1)}с`);
 
 el.gifWidth.value = state.gifWidth;
@@ -190,7 +199,8 @@ function currentParams() {
     scale: state.scale,
     warp: state.warp,
     softness: state.softness,
-    loops: state.loops,
+    loops: 1,
+    speed: speedToAmplitude(state.speed),
     seed: state.seed,
     circleMask: state.circleMask,
     bgColor: state.bgColor,
