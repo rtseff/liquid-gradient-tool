@@ -1,5 +1,6 @@
 import { LiquidGradientRenderer } from './render/LiquidGradientRenderer.js';
 import { exportWebm } from './export/exportWebm.js';
+import { exportVideo } from './export/exportVideo.js';
 import { exportGif } from './export/exportGif.js';
 import { PRESETS, presetGradientCss } from './presets.js';
 
@@ -20,7 +21,19 @@ const state = {
   height: 900,
   duration: 4,
   fps: 30,
+  format: 'webm+mp4', // 'webm+mp4' | 'webm' | 'mp4' | 'gif'
+  bitrate: 1.5, // Mbit/s
+  removeAlpha: true,
   gifWidth: 480,
+};
+
+const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF' };
+
+const FORMAT_HINTS = {
+  'webm+mp4': 'Для hero-секции: WebM (VP9) — основной файл, MP4 (H.264) — запасной для Safari. Подключайте оба через <source>.',
+  webm: 'WebM (VP9) — лёгкий файл для Chrome, Edge и Firefox. Для Safari добавьте MP4.',
+  mp4: 'MP4 (H.264) воспроизводится везде, включая Safari на iPhone и Mac. Альфа-канала в H.264 нет.',
+  gif: 'GIF — для превью и соцсетей: палитра 256 цветов, файл заметно тяжелее видео.',
 };
 
 // While an export runs, the preview loop must not touch the canvas: it
@@ -89,12 +102,19 @@ const el = {
   duration: document.getElementById('duration'),
   durationOut: document.getElementById('durationOut'),
   fps: document.getElementById('fps'),
+  format: document.getElementById('format'),
+  bitrateField: document.getElementById('bitrateField'),
+  bitrate: document.getElementById('bitrate'),
+  bitrateOut: document.getElementById('bitrateOut'),
+  alphaField: document.getElementById('alphaField'),
+  removeAlpha: document.getElementById('removeAlpha'),
+  gifWidthField: document.getElementById('gifWidthField'),
   gifWidth: document.getElementById('gifWidth'),
   gifWidthOut: document.getElementById('gifWidthOut'),
-  exportWebmBtn: document.getElementById('exportWebmBtn'),
-  exportGifBtn: document.getElementById('exportGifBtn'),
-  webmMeta: document.getElementById('webmMeta'),
-  gifMeta: document.getElementById('gifMeta'),
+  exportBtn: document.getElementById('exportBtn'),
+  exportLabel: document.getElementById('exportLabel'),
+  exportMeta: document.getElementById('exportMeta'),
+  formatHint: document.getElementById('formatHint'),
   exportProgress: document.getElementById('exportProgress'),
   progressFill: document.getElementById('progressFill'),
   progressLabel: document.getElementById('progressLabel'),
@@ -315,6 +335,7 @@ bindRange(el.softness, el.softnessOut, 'softness');
 bindRange(el.speed, el.speedOut, 'speed', (v) => `${Math.round(v * 100)}%`);
 bindRange(el.duration, el.durationOut, 'duration', (v) => `${v.toFixed(1)} с`, updateOutputMeta);
 bindRange(el.gifWidth, el.gifWidthOut, 'gifWidth', (v) => `${v} px`, updateOutputMeta);
+bindRange(el.bitrate, el.bitrateOut, 'bitrate', (v) => `${v.toFixed(1)} Мбит/с`, updateOutputMeta);
 
 el.newPatternBtn.addEventListener('click', () => {
   state.seed = [randomSeedValue(), randomSeedValue()];
@@ -322,11 +343,48 @@ el.newPatternBtn.addEventListener('click', () => {
 
 // --- Output settings --------------------------------------------------------
 
-function updateOutputMeta() {
-  const gif = gifSize();
-  el.webmMeta.textContent = `${state.width}×${state.height} · ${state.duration} с · ${state.fps} fps`;
-  el.gifMeta.textContent = `${gif.width}×${gif.height} · ${Math.min(state.fps, 30)} fps`;
+function videoContainers() {
+  return { 'webm+mp4': ['webm', 'mp4'], webm: ['webm'], mp4: ['mp4'], gif: [] }[state.format];
 }
+
+function updateOutputMeta() {
+  const containers = videoContainers();
+  const isGif = state.format === 'gif';
+  el.bitrateField.hidden = isGif;
+  el.gifWidthField.hidden = !isGif;
+  el.alphaField.hidden = !containers.includes('webm');
+
+  el.exportLabel.textContent = `Экспорт ${FORMAT_LABELS[state.format]}`;
+  if (isGif) {
+    const gif = gifSize();
+    el.exportMeta.textContent = `${gif.width}×${gif.height} · ${state.duration} с · ${Math.min(state.fps, 30)} fps`;
+  } else {
+    // Target bitrate × duration; real VP9/H.264 output of a slow gradient
+    // usually lands at or below this.
+    const approxBytes = (state.bitrate * 1e6 * state.duration) / 8;
+    const perFile = containers.length > 1 ? ' на файл' : '';
+    el.exportMeta.textContent =
+      `${state.width}×${state.height} · ${state.duration} с · ${state.fps} fps · ≈ ${formatBytes(approxBytes)}${perFile}`;
+  }
+
+  let hint = FORMAT_HINTS[state.format];
+  if (containers.includes('webm') && !state.removeAlpha) {
+    hint += ' WebM с альфа-каналом записывается в реальном времени.';
+  }
+  el.formatHint.textContent = hint;
+}
+
+el.format.value = state.format;
+el.format.addEventListener('change', () => {
+  state.format = el.format.value;
+  updateOutputMeta();
+});
+
+el.removeAlpha.checked = state.removeAlpha;
+el.removeAlpha.addEventListener('change', () => {
+  state.removeAlpha = el.removeAlpha.checked;
+  updateOutputMeta();
+});
 
 function applyResolution(w, h) {
   state.width = w;
@@ -349,10 +407,11 @@ el.resolutionPreset.addEventListener('change', () => {
   applyResolution(w, h);
 });
 
+// Rounded to even: H.264 (4:2:0) encoders reject odd frame dimensions.
 function clampSize(value, fallback) {
   const n = parseInt(value, 10);
   if (!Number.isFinite(n)) return fallback;
-  return Math.min(3840, Math.max(64, n));
+  return Math.min(3840, Math.max(64, Math.round(n / 2) * 2));
 }
 
 // Picking a preset blurs a just-edited size field, and the browser fires
@@ -407,8 +466,8 @@ requestAnimationFrame(previewLoop);
 
 function setBusy(busy) {
   exporting = busy;
-  el.exportWebmBtn.disabled = busy;
-  el.exportGifBtn.disabled = busy;
+  el.exportBtn.disabled = busy;
+  el.format.disabled = busy;
   el.exportProgress.hidden = !busy;
   if (busy) {
     el.statusLine.hidden = true;
@@ -461,53 +520,74 @@ function addResult({ name, blob, isVideo, width, height }) {
   el.results.prepend(node);
 }
 
-el.exportWebmBtn.addEventListener('click', async () => {
-  setBusy(true);
-  const { width, height } = state;
-  try {
-    renderer.setSize(width, height);
-    const blob = await exportWebm({
-      canvas,
-      renderFrame: (phase) => renderer.render(currentParams(), phase),
-      fps: state.fps,
-      duration: state.duration,
-      onProgress: (p) => updateProgress(p, `Запись WebM… ${Math.round(p * 100)}%`),
-    });
-    const name = `liquid-gradient-${width}x${height}.webm`;
-    addResult({ name, blob, isVideo: true, width, height });
-    showStatus(`Готово: ${name} (${formatBytes(blob.size)})`, 'success');
-  } catch (err) {
-    console.error(err);
-    showStatus(`Не удалось экспортировать WebM: ${err.message}`, 'error');
-  } finally {
-    setBusy(false);
-  }
-});
+const renderFrame = (phase) => renderer.render(currentParams(), phase);
 
-el.exportGifBtn.addEventListener('click', async () => {
-  setBusy(true);
+async function exportOneVideo(container, stepLabel) {
+  const { width, height, fps, duration } = state;
+  const bitrate = Math.round(state.bitrate * 1e6);
+  const label = container === 'webm' ? 'WebM' : 'MP4';
+  const onProgress = (p) => updateProgress(p, `${stepLabel}${label}… ${Math.round(p * 100)}%`);
+  renderer.setSize(width, height);
+  const blob =
+    container === 'webm' && !state.removeAlpha
+      ? await exportWebm({ canvas, renderFrame, fps, duration, bitrate, onProgress })
+      : await exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress });
+  const name = `liquid-gradient-${width}x${height}.${container}`;
+  addResult({ name, blob, isVideo: true, width, height });
+  return `${name} (${formatBytes(blob.size)})`;
+}
+
+async function exportGifFile() {
   const { width, height } = gifSize();
+  renderer.setSize(width, height);
+  const blob = await exportGif({
+    canvas,
+    renderFrame,
+    width,
+    height,
+    fps: Math.min(state.fps, 30),
+    duration: state.duration,
+    onProgress: (p, stage) => {
+      const label = stage === 'render' ? 'Рендер кадров…' : 'Кодирование GIF…';
+      updateProgress(p, `${label} ${Math.round(p * 100)}%`);
+    },
+  });
+  const name = `liquid-gradient-${width}x${height}.gif`;
+  addResult({ name, blob, isVideo: false, width, height });
+  return `${name} (${formatBytes(blob.size)})`;
+}
+
+el.exportBtn.addEventListener('click', async () => {
+  setBusy(true);
+  const done = [];
+  const failed = [];
   try {
-    renderer.setSize(width, height);
-    const blob = await exportGif({
-      canvas,
-      renderFrame: (phase) => renderer.render(currentParams(), phase),
-      width,
-      height,
-      fps: Math.min(state.fps, 30),
-      duration: state.duration,
-      onProgress: (p, stage) => {
-        const label = stage === 'render' ? 'Рендер кадров…' : 'Кодирование GIF…';
-        updateProgress(p, `${label} ${Math.round(p * 100)}%`);
-      },
-    });
-    const name = `liquid-gradient-${width}x${height}.gif`;
-    addResult({ name, blob, isVideo: false, width, height });
-    showStatus(`Готово: ${name} (${formatBytes(blob.size)})`, 'success');
-  } catch (err) {
-    console.error(err);
-    showStatus(`Не удалось экспортировать GIF: ${err.message}`, 'error');
+    if (state.format === 'gif') {
+      try {
+        done.push(await exportGifFile());
+      } catch (err) {
+        console.error(err);
+        failed.push(`GIF: ${err.message}`);
+      }
+    } else {
+      const containers = videoContainers();
+      for (const [i, container] of containers.entries()) {
+        const step = containers.length > 1 ? `${i + 1}/${containers.length} · ` : '';
+        try {
+          done.push(await exportOneVideo(container, step));
+        } catch (err) {
+          // One format failing (typically no H.264 encoder) must not throw
+          // away the other one that already succeeded.
+          console.error(err);
+          failed.push(`${container.toUpperCase()}: ${err.message}`);
+        }
+      }
+    }
   } finally {
     setBusy(false);
   }
+  const parts = [];
+  if (done.length) parts.push(`Готово: ${done.join(', ')}.`);
+  if (failed.length) parts.push(`Не удалось — ${failed.join('; ')}.`);
+  showStatus(parts.join(' '), failed.length ? 'error' : 'success');
 });

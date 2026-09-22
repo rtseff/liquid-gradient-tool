@@ -13,7 +13,7 @@
         <span class="brand-dot"></span>
         <span>Liquid Gradient Tool</span>
       </div>
-      <div class="topbar-hint">Анимированные жидкие градиенты для hero-секций · экспорт в WebM / GIF</div>
+      <div class="topbar-hint">Анимированные жидкие градиенты для hero-секций · экспорт в WebM / MP4 / GIF</div>
     </header>
 
     <main class="layout">
@@ -71,6 +71,15 @@
         <div class="panel output">
           <div class="output-settings">
             <label class="field">
+              <span>Формат</span>
+              <select id="format">
+                <option value="webm+mp4">WebM + MP4</option>
+                <option value="webm">WebM (VP9)</option>
+                <option value="mp4">MP4 (H.264)</option>
+                <option value="gif">GIF</option>
+              </select>
+            </label>
+            <label class="field">
               <span>Размер</span>
               <select id="resolutionPreset">
                 <option value="1920x1080">1920×1080 · hero</option>
@@ -101,29 +110,34 @@
                 <option value="60">60</option>
               </select>
             </label>
-            <label class="field">
+            <label class="field" id="bitrateField">
+              <span>Битрейт видео <output id="bitrateOut"></output></span>
+              <input id="bitrate" type="range" min="0.5" max="10" step="0.5" />
+            </label>
+            <label class="field" id="gifWidthField">
               <span>Ширина GIF <output id="gifWidthOut"></output></span>
               <input id="gifWidth" type="range" min="240" max="960" step="20" />
             </label>
+            <div class="field" id="alphaField">
+              <span>Альфа-канал</span>
+              <label class="checkbox-field">
+                <input id="removeAlpha" type="checkbox" checked />
+                <span>Убрать из WebM</span>
+              </label>
+            </div>
           </div>
 
-          <div class="output-actions">
-            <button id="exportWebmBtn" class="btn btn-primary" type="button">
-              Экспорт WebM
-              <small id="webmMeta" class="btn-meta"></small>
-            </button>
-            <button id="exportGifBtn" class="btn btn-secondary-strong" type="button">
-              Экспорт GIF
-              <small id="gifMeta" class="btn-meta"></small>
-            </button>
-          </div>
+          <button id="exportBtn" class="btn btn-primary btn-block" type="button">
+            <span id="exportLabel">Экспорт</span>
+            <small id="exportMeta" class="btn-meta"></small>
+          </button>
 
           <div id="exportProgress" class="progress" hidden>
             <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
             <span id="progressLabel"></span>
           </div>
           <p id="statusLine" class="status" role="status" hidden></p>
-          <p class="hint">WebM — для продакшн hero-секции (записывается в реальном времени). GIF — для превью и соцсетей: палитра 256 цветов, файл тяжелее.</p>
+          <p id="formatHint" class="hint"></p>
         </div>
 
         <div id="results" class="results" aria-label="Готовые файлы"></div>

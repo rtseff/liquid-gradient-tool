@@ -21,8 +21,8 @@ npx serve .
 python3 -m http.server 8080
 ```
 
-Open in Chrome/Edge (requires WebGL2 and `MediaRecorder` with
-`video/webm` support).
+Open in Chrome/Edge (requires WebGL2 and WebCodecs; MP4 additionally
+needs the browser's H.264 encoder).
 
 ## Testing / verification
 
@@ -74,14 +74,44 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
 - **`src/render/LiquidGradientRenderer.js`** — thin WebGL2 wrapper.
   Compiles/links the program once in the constructor; `render(params,
   phase)` sets all uniforms and issues one draw call. No textures.
-- **`src/export/exportWebm.js`** / **`exportGif.js`** — both take a
-  `renderFrame(phase)` callback (which just calls
-  `renderer.render(currentParams(), phase)`) and drive it frame-by-frame
-  at exact `phase = i / totalFrames` steps. WebM paces emission to real
-  time via `canvas.captureStream(0)` + `track.requestFrame()` (so a
-  manual, exactly-once-per-frame capture instead of wall-clock
-  sampling); GIF renders as fast as possible and hands frames to gif.js
-  with explicit per-frame delays.
+- **Exporters** all take a `renderFrame(phase)` callback (which just
+  calls `renderer.render(currentParams(), phase)`) and drive it
+  frame-by-frame at exact `phase = i / totalFrames` steps. The UI has one
+  export button; `state.format` is `'webm+mp4' | 'webm' | 'mp4' | 'gif'`
+  and `'webm+mp4'` runs the two video exports sequentially, keeping the
+  WebM even if MP4 fails (typically: no H.264 encoder).
+  - **`src/export/exportVideo.js`** — default path for WebM and MP4:
+    WebCodecs `VideoEncoder` (VP9 / H.264 High) with `bitrate` from the
+    UI and `alpha: 'discard'`, timestamps from the frame index (not the
+    clock), packed by the vendored muxers. Codec level strings are
+    computed from size × fps via the H.264 / VP9 level tables in that
+    file — encoders reject configs whose level is too low.
+    `videoSupportProblem()` probes `isConfigSupported` and distinguishes
+    "no encoder" from "unsupported size/fps".
+  - **webm-muxer writes the wrong duration**: it sets Segment › Info ›
+    Duration to the *start* of the last frame (48 frames @ 24 fps →
+    1.958 s), so players give the loop's last frame ~0 time.
+    `setWebmDuration()` patches that EBML element after `finalize()`.
+    mp4-muxer is fine (uses chunk durations). Verify both with a
+    `<video>`'s `duration` after any muxer change.
+  - **`src/export/exportWebm.js`** — `MediaRecorder` path, used only
+    when "Убрать из WebM" (remove alpha) is unchecked: Chrome's
+    MediaRecorder writes VP9 with an alpha plane (`AlphaMode = 1`) for
+    canvas captures even though our pixels are opaque, and WebCodecs
+    here reports `alpha: 'keep'` for VP9 as unsupported. It stamps
+    frames by wall clock, so it paces against an absolute schedule and
+    still stretches the video if rendering is slower than real time.
+  - **`src/export/exportGif.js`** — gif.js, renders as fast as possible
+    with explicit per-frame delays.
+- **H.264 can't be tested in this sandbox**: the pre-installed Chromium
+  has no proprietary codecs (`isConfigSupported` false for any `avc1.*`,
+  MediaRecorder `video/mp4;codecs=avc1` false). To exercise the MP4
+  code path, copy `exportVideo.js` to a temp file with `avcCodec` →
+  `vp9Codec` and mp4-muxer `codec: 'avc'` → `'vp9'` (MP4 can carry VP9),
+  import it in the page, and check `<video>.duration` and that the
+  file starts with `ftyp` then `moov`. Delete the temp file afterwards.
+- **Custom sizes are rounded to even** in `clampSize()` — H.264 (4:2:0)
+  rejects odd dimensions.
 - **Export and preview share one canvas, so the preview loop is paused
   during export** (`exporting` flag in `main.js`, set by `setBusy()`).
   This is load-bearing: `previewLoop` calls `renderer.setSize()` to the
@@ -108,6 +138,11 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   - `vendor/gifjs/` — gif.js and its worker script, loaded dynamically
     by `exportGif.js` via `<script>`/`Worker` URLs built with
     `import.meta.url`. Don't switch this to a CDN import.
+  - `vendor/webm-muxer/`, `vendor/mp4-muxer/` — unmodified `.mjs`
+    builds (MIT, ~65 KB each), imported as ES modules by
+    `exportVideo.js`. npm marks both as superseded by Mediabunny; they
+    were kept on purpose (Mediabunny's smallest bundle is ~684 KB,
+    MPL-2.0) — see each folder's README.
 
 ### The seamless-loop technique (the one non-obvious invariant)
 

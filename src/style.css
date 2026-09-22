@@ -318,11 +318,6 @@ output {
   background: #33e9bd;
 }
 
-.btn-secondary-strong {
-  border-color: var(--accent-dim);
-  font-weight: 600;
-}
-
 .btn-meta {
   font-size: 11px;
   font-weight: 400;
@@ -495,10 +490,26 @@ output {
   color: var(--text-dim);
 }
 
-.output-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+#exportBtn {
+  margin-top: 2px;
+  padding: 11px 14px;
+  font-size: 14px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  min-height: 32px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.checkbox-field input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .progress {
