@@ -3,6 +3,9 @@ import { exportWebm } from './export/exportWebm.js';
 import { exportGif } from './export/exportGif.js';
 import { PRESETS, presetGradientCss } from './presets.js';
 
+const MAX_COLORS = 6;
+const MIN_COLORS = 2;
+
 const canvas = document.getElementById('previewCanvas');
 const renderer = new LiquidGradientRenderer(canvas);
 
@@ -13,9 +16,8 @@ const state = {
   softness: 0.3,
   speed: 0.5, // raw slider value 0..1, eased into an amplitude via speedToAmplitude()
   seed: [randomSeedValue(), randomSeedValue()],
-  maskMode: 'none', // 'none' | 'circle' | 'custom'
+  maskMode: 'none', // 'none' | 'circle'
   maskInvert: false,
-  maskImage: null,
   bgColor: '#000000',
   width: 1600,
   height: 900,
@@ -23,6 +25,13 @@ const state = {
   fps: 30,
   gifWidth: 480,
 };
+
+// While an export runs, the preview loop must not touch the canvas: it
+// resizes the canvas back to the preview size every frame, and gif.js
+// copies frames with an unscaled drawImage(canvas, 0, 0) — so a preview
+// frame sneaking in between export frames turns the GIF into a cropped
+// corner of the full-size render.
+let exporting = false;
 
 function randomSeedValue() {
   return Math.random() * 1000 - 500;
@@ -53,15 +62,21 @@ function speedToAmplitude(rawSpeed) {
   return rawSpeed ** 3;
 }
 
+function gifSize() {
+  const width = Math.min(state.gifWidth, state.width);
+  return { width, height: Math.round((width * state.height) / state.width) };
+}
+
 // --- DOM refs -------------------------------------------------------------
 
 const el = {
   presetList: document.getElementById('presetList'),
   colorList: document.getElementById('colorList'),
+  colorCount: document.getElementById('colorCount'),
   addColorBtn: document.getElementById('addColorBtn'),
-  randomizeBtn: document.getElementById('randomizeBtn'),
   undoColorBtn: document.getElementById('undoColorBtn'),
   redoColorBtn: document.getElementById('redoColorBtn'),
+  newPatternBtn: document.getElementById('newPatternBtn'),
   scale: document.getElementById('scale'),
   scaleOut: document.getElementById('scaleOut'),
   warp: document.getElementById('warp'),
@@ -70,16 +85,9 @@ const el = {
   softnessOut: document.getElementById('softnessOut'),
   speed: document.getElementById('speed'),
   speedOut: document.getElementById('speedOut'),
-  maskMode: document.getElementById('maskMode'),
-  maskUploadRow: document.getElementById('maskUploadRow'),
-  maskFileInput: document.getElementById('maskFileInput'),
-  maskPreviewRow: document.getElementById('maskPreviewRow'),
-  maskPreviewImg: document.getElementById('maskPreviewImg'),
-  clearMaskBtn: document.getElementById('clearMaskBtn'),
-  maskInvertField: document.getElementById('maskInvertField'),
+  maskSegments: document.querySelectorAll('.segment[data-mask]'),
+  circleOptions: document.getElementById('circleOptions'),
   maskInvert: document.getElementById('maskInvert'),
-  maskHint: document.getElementById('maskHint'),
-  bgColorField: document.getElementById('bgColorField'),
   bgColor: document.getElementById('bgColor'),
   resolutionPreset: document.getElementById('resolutionPreset'),
   customSizeRow: document.getElementById('customSizeRow'),
@@ -92,9 +100,12 @@ const el = {
   gifWidthOut: document.getElementById('gifWidthOut'),
   exportWebmBtn: document.getElementById('exportWebmBtn'),
   exportGifBtn: document.getElementById('exportGifBtn'),
+  webmMeta: document.getElementById('webmMeta'),
+  gifMeta: document.getElementById('gifMeta'),
   exportProgress: document.getElementById('exportProgress'),
   progressFill: document.getElementById('progressFill'),
   progressLabel: document.getElementById('progressLabel'),
+  statusLine: document.getElementById('statusLine'),
   results: document.getElementById('results'),
 };
 
@@ -103,25 +114,37 @@ const resultTemplate = document.getElementById('resultTemplate');
 
 // --- Presets ---------------------------------------------------------------
 
-PRESETS.forEach((preset) => {
-  const btn = document.createElement('div');
+const presetButtons = PRESETS.map((preset) => {
+  const btn = document.createElement('button');
+  btn.type = 'button';
   btn.className = 'preset-swatch';
   btn.style.background = presetGradientCss(preset.colors);
   btn.title = preset.name;
-  btn.innerHTML = `<span>${preset.name}</span>`;
+  btn.setAttribute('aria-pressed', 'false');
+  const label = document.createElement('span');
+  label.textContent = preset.name;
+  btn.appendChild(label);
   btn.addEventListener('click', () => {
     state.colors = [...preset.colors];
     pushColorHistory();
     renderColorList();
   });
   el.presetList.appendChild(btn);
+  return { btn, colors: preset.colors };
 });
+
+function updatePresetActive() {
+  const current = state.colors.join(',');
+  presetButtons.forEach(({ btn, colors }) => {
+    btn.setAttribute('aria-pressed', String(colors.join(',') === current));
+  });
+}
 
 // --- Colors ------------------------------------------------------------
 //
-// Every add/remove/edit of the palette is pushed onto an undo/redo
-// history stack (snapshots of state.colors), so mistakes made while
-// experimenting with a palette are cheap to back out of.
+// Every add/remove/edit/reorder of the palette is pushed onto an
+// undo/redo history stack (snapshots of state.colors), so mistakes made
+// while experimenting with a palette are cheap to back out of.
 
 const colorHistory = [[...state.colors]];
 let colorHistoryIndex = 0;
@@ -138,6 +161,7 @@ function pushColorHistory() {
   colorHistory.push([...state.colors]);
   colorHistoryIndex++;
   updateHistoryButtons();
+  updatePresetActive();
 }
 
 function renderColorList() {
@@ -179,10 +203,12 @@ function renderColorList() {
       }
     });
     hexInput.addEventListener('focus', () => hexInput.select());
+
     const removeBtn = node.querySelector('.remove-color');
-    removeBtn.disabled = state.colors.length <= 2;
+    removeBtn.disabled = state.colors.length <= MIN_COLORS;
+    if (removeBtn.disabled) removeBtn.title = `Нужно минимум ${MIN_COLORS} цвета`;
     removeBtn.addEventListener('click', () => {
-      if (state.colors.length <= 2) return;
+      if (state.colors.length <= MIN_COLORS) return;
       state.colors.splice(index, 1);
       pushColorHistory();
       renderColorList();
@@ -222,12 +248,17 @@ function renderColorList() {
 
     el.colorList.appendChild(node);
   });
+
+  const full = state.colors.length >= MAX_COLORS;
+  el.addColorBtn.disabled = full;
+  el.addColorBtn.textContent = full ? `Максимум ${MAX_COLORS} цветов` : '+ Добавить цвет';
+  el.colorCount.textContent = `${state.colors.length}/${MAX_COLORS}`;
+  updatePresetActive();
 }
 
 el.addColorBtn.addEventListener('click', () => {
-  if (state.colors.length >= 6) return;
-  const last = state.colors[state.colors.length - 1] || '#ffffff';
-  state.colors.push(last);
+  if (state.colors.length >= MAX_COLORS) return;
+  state.colors.push(state.colors[state.colors.length - 1]);
   pushColorHistory();
   renderColorList();
 });
@@ -248,8 +279,16 @@ el.redoColorBtn.addEventListener('click', () => {
   renderColorList();
 });
 
+function isTextEditing(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || target.tagName === 'TEXTAREA') return true;
+  return target.tagName === 'INPUT' && ['text', 'number'].includes(target.type);
+}
+
 window.addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+  // Inside a text field Ctrl+Z must keep undoing the typing, not the palette.
+  if (isTextEditing(e.target)) return;
   e.preventDefault();
   if (e.shiftKey) {
     el.redoColorBtn.click();
@@ -258,102 +297,78 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-el.randomizeBtn.addEventListener('click', () => {
-  state.seed = [randomSeedValue(), randomSeedValue()];
-});
-
 renderColorList();
 updateHistoryButtons();
 
-// --- Shape sliders -------------------------------------------------------
+// --- Sliders -------------------------------------------------------------
 
-function bindRange(input, output, key, format = (v) => v.toFixed(2)) {
-  input.value = state[key];
-  output.textContent = format(state[key]);
-  input.addEventListener('input', () => {
-    state[key] = parseFloat(input.value);
-    output.textContent = format(state[key]);
-  });
+function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
+  const defaultValue = state[key];
+  const apply = (value) => {
+    state[key] = value;
+    input.value = value;
+    output.textContent = format(value);
+    onChange?.();
+  };
+  apply(defaultValue);
+  input.title = 'Двойной клик — значение по умолчанию';
+  input.addEventListener('input', () => apply(parseFloat(input.value)));
+  input.addEventListener('dblclick', () => apply(defaultValue));
 }
 
 bindRange(el.scale, el.scaleOut, 'scale');
 bindRange(el.warp, el.warpOut, 'warp');
 bindRange(el.softness, el.softnessOut, 'softness');
 bindRange(el.speed, el.speedOut, 'speed', (v) => `${Math.round(v * 100)}%`);
-bindRange(el.duration, el.durationOut, 'duration', (v) => `${v.toFixed(1)}с`);
+bindRange(el.duration, el.durationOut, 'duration', (v) => `${v.toFixed(1)} с`, updateOutputMeta);
+bindRange(el.gifWidth, el.gifWidthOut, 'gifWidth', (v) => `${v} px`, updateOutputMeta);
 
-el.gifWidth.value = state.gifWidth;
-el.gifWidthOut.textContent = `${state.gifWidth}px`;
-el.gifWidth.addEventListener('input', () => {
-  state.gifWidth = parseInt(el.gifWidth.value, 10);
-  el.gifWidthOut.textContent = `${state.gifWidth}px`;
+el.newPatternBtn.addEventListener('click', () => {
+  state.seed = [randomSeedValue(), randomSeedValue()];
 });
 
-// --- Mask ------------------------------------------------------------
+// --- Frame shape (circle mask) --------------------------------------------
 
 function updateMaskUi() {
-  const mode = state.maskMode;
-  el.maskUploadRow.hidden = mode !== 'custom';
-  el.maskPreviewRow.hidden = !(mode === 'custom' && state.maskImage);
-  el.maskInvertField.hidden = mode === 'none';
-  el.bgColorField.hidden = mode === 'none';
-  el.maskHint.hidden = mode !== 'custom';
+  el.maskSegments.forEach((segment) => {
+    segment.setAttribute('aria-checked', String(segment.dataset.mask === state.maskMode));
+  });
+  el.circleOptions.hidden = state.maskMode !== 'circle';
 }
 
-el.maskMode.addEventListener('change', () => {
-  state.maskMode = el.maskMode.value;
-  updateMaskUi();
-});
-
-el.maskFileInput.addEventListener('change', () => {
-  const file = el.maskFileInput.files?.[0];
-  if (!file) return;
-  const url = URL.createObjectURL(file);
-  const image = new Image();
-  image.onload = () => {
-    state.maskImage = image;
-    renderer.setMaskImage(image);
-    el.maskPreviewImg.src = url;
+el.maskSegments.forEach((segment) => {
+  segment.addEventListener('click', () => {
+    state.maskMode = segment.dataset.mask;
     updateMaskUi();
-  };
-  image.onerror = () => {
-    alert('Не удалось загрузить изображение маски.');
-    URL.revokeObjectURL(url);
-  };
-  image.src = url;
-});
-
-el.clearMaskBtn.addEventListener('click', () => {
-  state.maskImage = null;
-  el.maskFileInput.value = '';
-  el.maskPreviewImg.src = '';
-  updateMaskUi();
+  });
 });
 
 el.maskInvert.addEventListener('change', () => {
   state.maskInvert = el.maskInvert.checked;
 });
 
-updateMaskUi();
-
 el.bgColor.value = state.bgColor;
 el.bgColor.addEventListener('input', () => {
   state.bgColor = el.bgColor.value;
 });
 
-el.fps.value = String(state.fps);
-el.fps.addEventListener('change', () => {
-  state.fps = parseInt(el.fps.value, 10);
-});
+updateMaskUi();
 
-// --- Resolution ------------------------------------------------------------
+// --- Output settings --------------------------------------------------------
+
+function updateOutputMeta() {
+  const gif = gifSize();
+  el.webmMeta.textContent = `${state.width}×${state.height} · ${state.duration} с · ${state.fps} fps`;
+  el.gifMeta.textContent = `${gif.width}×${gif.height} · ${Math.min(state.fps, 30)} fps`;
+}
 
 function applyResolution(w, h) {
   state.width = w;
   state.height = h;
+  updateOutputMeta();
 }
 
-el.resolutionPreset.value = '1600x900';
+el.resolutionPreset.value = `${state.width}x${state.height}`;
 
 el.resolutionPreset.addEventListener('change', () => {
   const val = el.resolutionPreset.value;
@@ -368,12 +383,33 @@ el.resolutionPreset.addEventListener('change', () => {
   applyResolution(w, h);
 });
 
-el.customWidth.addEventListener('input', () => {
-  applyResolution(parseInt(el.customWidth.value, 10) || state.width, state.height);
+function clampSize(value, fallback) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(3840, Math.max(64, n));
+}
+
+// Picking a preset blurs a just-edited size field, and the browser fires
+// that field's pending 'change' *after* the preset applied — so only
+// honor these fields while "custom" is actually selected.
+el.customWidth.addEventListener('change', () => {
+  if (el.resolutionPreset.value !== 'custom') return;
+  applyResolution(clampSize(el.customWidth.value, state.width), state.height);
+  el.customWidth.value = state.width;
 });
-el.customHeight.addEventListener('input', () => {
-  applyResolution(state.width, parseInt(el.customHeight.value, 10) || state.height);
+el.customHeight.addEventListener('change', () => {
+  if (el.resolutionPreset.value !== 'custom') return;
+  applyResolution(state.width, clampSize(el.customHeight.value, state.height));
+  el.customHeight.value = state.height;
 });
+
+el.fps.value = String(state.fps);
+el.fps.addEventListener('change', () => {
+  state.fps = parseInt(el.fps.value, 10);
+  updateOutputMeta();
+});
+
+updateOutputMeta();
 
 // --- Live preview loop -------------------------------------------------
 
@@ -392,12 +428,14 @@ function currentParams() {
   };
 }
 
-let previewStart = performance.now();
+const previewStart = performance.now();
 function previewLoop(now) {
-  const elapsedSec = (now - previewStart) / 1000;
-  const phase = (elapsedSec % state.duration) / state.duration;
-  renderer.setSize(state.width, state.height);
-  renderer.render(currentParams(), phase);
+  if (!exporting) {
+    const elapsedSec = (now - previewStart) / 1000;
+    const phase = (elapsedSec % state.duration) / state.duration;
+    renderer.setSize(state.width, state.height);
+    renderer.render(currentParams(), phase);
+  }
   requestAnimationFrame(previewLoop);
 }
 requestAnimationFrame(previewLoop);
@@ -405,10 +443,13 @@ requestAnimationFrame(previewLoop);
 // --- Export --------------------------------------------------------------
 
 function setBusy(busy) {
+  exporting = busy;
   el.exportWebmBtn.disabled = busy;
   el.exportGifBtn.disabled = busy;
   el.exportProgress.hidden = !busy;
-  if (!busy) {
+  if (busy) {
+    el.statusLine.hidden = true;
+  } else {
     el.progressFill.style.width = '0%';
   }
 }
@@ -418,10 +459,23 @@ function updateProgress(fraction, label) {
   el.progressLabel.textContent = label;
 }
 
-function addResult({ name, blob, isVideo }) {
+function showStatus(message, kind) {
+  el.statusLine.textContent = message;
+  el.statusLine.dataset.kind = kind;
+  el.statusLine.hidden = false;
+}
+
+function formatBytes(bytes) {
+  return bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(2)} МБ`
+    : `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+}
+
+function addResult({ name, blob, isVideo, width, height }) {
   const node = resultTemplate.content.firstElementChild.cloneNode(true);
   const url = URL.createObjectURL(blob);
   const previewSlot = node.querySelector('.result-preview');
+  previewSlot.style.aspectRatio = `${width} / ${height}`;
   if (isVideo) {
     const video = document.createElement('video');
     video.src = url;
@@ -433,10 +487,11 @@ function addResult({ name, blob, isVideo }) {
   } else {
     const img = document.createElement('img');
     img.src = url;
+    img.alt = name;
     previewSlot.appendChild(img);
   }
   node.querySelector('.result-name').textContent = name;
-  node.querySelector('.result-size').textContent = `${(blob.size / (1024 * 1024)).toFixed(2)} МБ`;
+  node.querySelector('.result-size').textContent = formatBytes(blob.size);
   const link = node.querySelector('.result-download');
   link.href = url;
   link.download = name;
@@ -445,8 +500,9 @@ function addResult({ name, blob, isVideo }) {
 
 el.exportWebmBtn.addEventListener('click', async () => {
   setBusy(true);
+  const { width, height } = state;
   try {
-    renderer.setSize(state.width, state.height);
+    renderer.setSize(width, height);
     const blob = await exportWebm({
       canvas,
       renderFrame: (phase) => renderer.render(currentParams(), phase),
@@ -454,10 +510,12 @@ el.exportWebmBtn.addEventListener('click', async () => {
       duration: state.duration,
       onProgress: (p) => updateProgress(p, `Запись WebM… ${Math.round(p * 100)}%`),
     });
-    addResult({ name: `liquid-gradient-${state.width}x${state.height}.webm`, blob, isVideo: true });
+    const name = `liquid-gradient-${width}x${height}.webm`;
+    addResult({ name, blob, isVideo: true, width, height });
+    showStatus(`Готово: ${name} (${formatBytes(blob.size)})`, 'success');
   } catch (err) {
     console.error(err);
-    alert(`Не удалось экспортировать WebM: ${err.message}`);
+    showStatus(`Не удалось экспортировать WebM: ${err.message}`, 'error');
   } finally {
     setBusy(false);
   }
@@ -465,16 +523,14 @@ el.exportWebmBtn.addEventListener('click', async () => {
 
 el.exportGifBtn.addEventListener('click', async () => {
   setBusy(true);
+  const { width, height } = gifSize();
   try {
-    const aspect = state.height / state.width;
-    const gifW = Math.min(state.gifWidth, state.width);
-    const gifH = Math.round(gifW * aspect);
-    renderer.setSize(gifW, gifH);
+    renderer.setSize(width, height);
     const blob = await exportGif({
       canvas,
       renderFrame: (phase) => renderer.render(currentParams(), phase),
-      width: gifW,
-      height: gifH,
+      width,
+      height,
       fps: Math.min(state.fps, 30),
       duration: state.duration,
       onProgress: (p, stage) => {
@@ -482,12 +538,13 @@ el.exportGifBtn.addEventListener('click', async () => {
         updateProgress(p, `${label} ${Math.round(p * 100)}%`);
       },
     });
-    addResult({ name: `liquid-gradient-${gifW}x${gifH}.gif`, blob, isVideo: false });
+    const name = `liquid-gradient-${width}x${height}.gif`;
+    addResult({ name, blob, isVideo: false, width, height });
+    showStatus(`Готово: ${name} (${formatBytes(blob.size)})`, 'success');
   } catch (err) {
     console.error(err);
-    alert(`Не удалось экспортировать GIF: ${err.message}`);
+    showStatus(`Не удалось экспортировать GIF: ${err.message}`, 'error');
   } finally {
-    renderer.setSize(state.width, state.height);
     setBusy(false);
   }
 });

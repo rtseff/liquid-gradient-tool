@@ -64,27 +64,40 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   re-renders, using `state.duration` as the wall-clock loop period.
   There's no framework or reactivity layer: every control's event
   listener mutates `state` directly and, where needed, re-renders the
-  affected DOM (e.g. `renderColorList()`, `updateMaskUi()`).
+  affected DOM (e.g. `renderColorList()`, `updateMaskUi()`,
+  `updateOutputMeta()`). Errors/success are reported inline via
+  `showStatus()`, not `alert()`. The global Ctrl+Z palette undo is
+  skipped while a text/number input has focus (`isTextEditing()`).
 - **`src/render/shaders.js`** — GLSL source as template strings
   (`VERTEX_SHADER`, `FRAGMENT_SHADER`), plus the vendored 4D simplex
   noise (`SIMPLEX_4D`). The vertex shader draws a fullscreen triangle
   from `gl_VertexID` alone — no vertex buffers.
 - **`src/render/LiquidGradientRenderer.js`** — thin WebGL2 wrapper.
   Compiles/links the program once in the constructor; `render(params,
-  phase)` sets all uniforms and issues one draw call. Owns a single
-  mask texture bound to `TEXTURE0`: `setMaskImage()` uploads a
-  user-supplied image into it, otherwise it stays a 1×1 white
-  placeholder (so mask mode `'custom'` with nothing uploaded yet is a
-  harmless no-op, not a black screen).
+  phase)` sets all uniforms and issues one draw call. No textures.
 - **`src/export/exportWebm.js`** / **`exportGif.js`** — both take a
   `renderFrame(phase)` callback (which just calls
   `renderer.render(currentParams(), phase)`) and drive it frame-by-frame
-  at exact `phase = i / totalFrames` steps, independent of the live
-  preview loop. WebM paces emission to real time via
-  `canvas.captureStream(0)` + `track.requestFrame()` (so a manual,
-  exactly-once-per-frame capture instead of wall-clock sampling); GIF
-  renders as fast as possible and hands frames to gif.js with explicit
-  per-frame delays.
+  at exact `phase = i / totalFrames` steps. WebM paces emission to real
+  time via `canvas.captureStream(0)` + `track.requestFrame()` (so a
+  manual, exactly-once-per-frame capture instead of wall-clock
+  sampling); GIF renders as fast as possible and hands frames to gif.js
+  with explicit per-frame delays.
+- **Export and preview share one canvas, so the preview loop is paused
+  during export** (`exporting` flag in `main.js`, set by `setBusy()`).
+  This is load-bearing: `previewLoop` calls `renderer.setSize()` to the
+  preview size every frame, and gif.js copies frames with an unscaled
+  `drawImage(canvas, 0, 0)` — before the flag existed, 47 of 48 GIF
+  frames at default settings (1600×900 → 480×270 GIF) were a cropped
+  top-left corner of the full-size render. Any new export path must go
+  through `setBusy(true)` too.
+- **UI layout**: left `.controls` panel = look of the gradient; right
+  `.stage` = canvas + `.output` panel (size/duration/FPS/export buttons)
+  + results strip. Under 900px `.stage` becomes `display: contents` so
+  its children can be reordered with the controls (canvas sticky on top,
+  no nested scroll container). The global `[hidden] { display: none
+  !important }` rule exists because component rules like
+  `.field { display: flex }` otherwise override the `hidden` attribute.
 - **`src/presets.js`** — static palette data plus `presetGradientCss()`
   for the swatch UI. No other state.
 - **`vendor/`** — runtime dependencies checked into the repo instead of
@@ -118,12 +131,18 @@ If you add any new time-varying effect to the shader, it must be driven
 through this same phase→circle mapping, never through `phase` directly,
 or the exported loop will visibly jump at the seam.
 
-### Mask modes
+### Frame shape (circle mask)
 
-`state.maskMode` is `'none' | 'circle' | 'custom'`, mapped to
-`u_maskMode` 0/1/2 in the fragment shader. `'circle'` is a pure
-distance-field mask, no texture involved. `'custom'` samples
-`u_maskTex` (luminance × alpha of the uploaded image), stretched to
-fill the canvas with no aspect-ratio correction. Both non-`'none'`
-modes blend the gradient against `state.bgColor` via `mix()`, and both
-support `state.maskInvert`.
+`state.maskMode` is `'none' | 'circle'` (UI: "Форма кадра" segmented
+control), mapped to `u_maskMode` 0/1 in the fragment shader. `'circle'`
+is a pure distance-field mask that blends the gradient against
+`state.bgColor` via `mix()` and supports `state.maskInvert`. Custom
+image masks were deliberately removed at the user's request — don't
+reintroduce them.
+
+### Slider semantics worth knowing
+
+"Баланс цветов" is `state.softness` → `pow(field, mix(2.2, 0.45, x))`
+in the shader: it biases the field toward the first vs. last colors of
+the list, it is not a contrast control. `bindRange()` captures each
+slider's initial `state` value as its double-click reset default.

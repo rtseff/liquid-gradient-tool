@@ -24,20 +24,24 @@
         </div>
 
         <div class="control-group">
-          <h2>Цвета</h2>
+          <div class="group-header">
+            <h2>Цвета <span id="colorCount" class="count"></span></h2>
+            <div class="header-actions">
+              <button id="undoColorBtn" class="btn-ghost" type="button" title="Отменить (Ctrl+Z)" aria-label="Отменить" disabled>↶</button>
+              <button id="redoColorBtn" class="btn-ghost" type="button" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить" disabled>↷</button>
+            </div>
+          </div>
           <div id="colorList" class="color-list"></div>
-          <div class="row">
-            <button id="undoColorBtn" class="btn btn-secondary" type="button" title="Отменить (Ctrl+Z)" disabled>↶ Отменить</button>
-            <button id="redoColorBtn" class="btn btn-secondary" type="button" title="Повторить (Ctrl+Shift+Z)" disabled>↷ Повторить</button>
-          </div>
-          <div class="row">
-            <button id="addColorBtn" class="btn btn-secondary" type="button">+ Цвет</button>
-            <button id="randomizeBtn" class="btn btn-secondary" type="button">🎲 Случайно</button>
-          </div>
+          <button id="addColorBtn" class="btn btn-block" type="button">+ Добавить цвет</button>
         </div>
 
         <div class="control-group">
-          <h2>Форма потока</h2>
+          <div class="group-header">
+            <h2>Форма потока</h2>
+            <div class="header-actions">
+              <button id="newPatternBtn" class="btn-ghost btn-ghost-text" type="button" title="Тот же характер движения, другой рисунок">↻ Новый узор</button>
+            </div>
+          </div>
           <label class="field">
             <span>Масштаб узора <output id="scaleOut"></output></span>
             <input id="scale" type="range" min="0.6" max="5" step="0.05" />
@@ -47,105 +51,100 @@
             <input id="warp" type="range" min="0" max="2.5" step="0.05" />
           </label>
           <label class="field">
-            <span>Контраст цветовых зон <output id="softnessOut"></output></span>
+            <span>Баланс цветов <output id="softnessOut"></output></span>
             <input id="softness" type="range" min="0" max="1" step="0.01" />
+            <small class="range-legend"><span>больше первых</span><span>больше последних</span></small>
           </label>
           <label class="field">
             <span>Скорость движения <output id="speedOut"></output></span>
             <input id="speed" type="range" min="0" max="1" step="0.01" />
           </label>
+          <p class="hint">Двойной клик по ползунку возвращает значение по умолчанию.</p>
         </div>
 
         <div class="control-group">
-          <h2>Маска</h2>
-          <select id="maskMode">
-            <option value="none">Без маски (прямоугольник)</option>
-            <option value="circle">Круг (как на референсе)</option>
-            <option value="custom">Своё изображение…</option>
-          </select>
-
-          <div id="maskUploadRow" class="row" hidden>
-            <input id="maskFileInput" type="file" accept="image/*" />
+          <h2>Форма кадра</h2>
+          <div class="segmented" role="radiogroup" aria-label="Форма кадра">
+            <button type="button" class="segment" role="radio" data-mask="none">Прямоугольник</button>
+            <button type="button" class="segment" role="radio" data-mask="circle">Круг</button>
           </div>
-
-          <div id="maskPreviewRow" class="row mask-preview-row" hidden>
-            <img id="maskPreviewImg" class="mask-preview" alt="Превью маски" />
-            <button id="clearMaskBtn" class="btn-icon remove-color" type="button" title="Убрать изображение">✕</button>
-          </div>
-
-          <label class="field checkbox-field" id="maskInvertField" hidden>
-            <input id="maskInvert" type="checkbox" />
-            <span>Инвертировать маску</span>
-          </label>
-
-          <label class="field" id="bgColorField" hidden>
-            <span>Цвет фона вне маски</span>
-            <input id="bgColor" type="color" />
-          </label>
-
-          <p class="hint" id="maskHint" hidden>
-            Маска растягивается на весь холст. Светлые/непрозрачные области
-            изображения показывают градиент, тёмные/прозрачные — цвет фона.
-          </p>
-        </div>
-
-        <div class="control-group">
-          <h2>Разрешение</h2>
-          <select id="resolutionPreset">
-            <option value="1920x1080">Hero 1920×1080 (16:9)</option>
-            <option value="1600x900">Hero 1600×900 (16:9)</option>
-            <option value="1920x640">Широкий баннер 1920×640</option>
-            <option value="1200x630">OG / соцсети 1200×630</option>
-            <option value="1080x1080">Квадрат 1080×1080</option>
-            <option value="custom">Свой размер…</option>
-          </select>
-          <div class="row" id="customSizeRow" hidden>
-            <label class="field-inline">
-              <span>Ширина</span>
-              <input id="customWidth" type="number" min="64" max="3840" step="1" />
+          <div id="circleOptions" hidden>
+            <label class="field checkbox-field">
+              <input id="maskInvert" type="checkbox" />
+              <span>Инвертировать (градиент снаружи круга)</span>
             </label>
-            <label class="field-inline">
-              <span>Высота</span>
-              <input id="customHeight" type="number" min="64" max="3840" step="1" />
+            <label class="field field-row">
+              <span>Цвет фона</span>
+              <input id="bgColor" type="color" />
             </label>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <h2>Экспорт</h2>
-          <label class="field">
-            <span>Длительность loop, сек <output id="durationOut"></output></span>
-            <input id="duration" type="range" min="2" max="10" step="0.5" />
-          </label>
-          <label class="field">
-            <span>FPS</span>
-            <select id="fps">
-              <option value="24">24</option>
-              <option value="30" selected>30</option>
-              <option value="60">60</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Макс. ширина GIF (px) <output id="gifWidthOut"></output></span>
-            <input id="gifWidth" type="range" min="240" max="960" step="20" />
-          </label>
-          <p class="hint">GIF ограничен палитрой 256 цветов и весит намного больше WebM — используйте его для превью/соцсетей, а WebM для продакшн hero-секции.</p>
-          <div class="row">
-            <button id="exportWebmBtn" class="btn btn-primary" type="button">Экспорт WebM</button>
-            <button id="exportGifBtn" class="btn btn-primary" type="button">Экспорт GIF</button>
-          </div>
-          <div id="exportProgress" class="progress" hidden>
-            <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
-            <span id="progressLabel"></span>
           </div>
         </div>
       </section>
 
-      <section class="panel preview" aria-label="Превью">
+      <section class="stage" aria-label="Превью и экспорт">
         <div class="canvas-wrap">
           <canvas id="previewCanvas"></canvas>
         </div>
-        <div id="results" class="results"></div>
+
+        <div class="panel output">
+          <div class="output-settings">
+            <label class="field">
+              <span>Размер</span>
+              <select id="resolutionPreset">
+                <option value="1920x1080">1920×1080 · hero</option>
+                <option value="1600x900">1600×900 · hero</option>
+                <option value="1920x640">1920×640 · баннер</option>
+                <option value="1200x630">1200×630 · OG</option>
+                <option value="1080x1080">1080×1080 · квадрат</option>
+                <option value="custom">Свой размер…</option>
+              </select>
+            </label>
+            <div class="field custom-size" id="customSizeRow" hidden>
+              <span>Ширина × высота</span>
+              <div class="size-inputs">
+                <input id="customWidth" type="number" min="64" max="3840" step="1" aria-label="Ширина" />
+                <span aria-hidden="true">×</span>
+                <input id="customHeight" type="number" min="64" max="3840" step="1" aria-label="Высота" />
+              </div>
+            </div>
+            <label class="field">
+              <span>Длительность loop <output id="durationOut"></output></span>
+              <input id="duration" type="range" min="2" max="10" step="0.5" />
+            </label>
+            <label class="field">
+              <span>FPS</span>
+              <select id="fps">
+                <option value="24">24</option>
+                <option value="30" selected>30</option>
+                <option value="60">60</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Ширина GIF <output id="gifWidthOut"></output></span>
+              <input id="gifWidth" type="range" min="240" max="960" step="20" />
+            </label>
+          </div>
+
+          <div class="output-actions">
+            <button id="exportWebmBtn" class="btn btn-primary" type="button">
+              Экспорт WebM
+              <small id="webmMeta" class="btn-meta"></small>
+            </button>
+            <button id="exportGifBtn" class="btn btn-secondary-strong" type="button">
+              Экспорт GIF
+              <small id="gifMeta" class="btn-meta"></small>
+            </button>
+          </div>
+
+          <div id="exportProgress" class="progress" hidden>
+            <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+            <span id="progressLabel"></span>
+          </div>
+          <p id="statusLine" class="status" role="status" hidden></p>
+          <p class="hint">WebM — для продакшн hero-секции (записывается в реальном времени). GIF — для превью и соцсетей: палитра 256 цветов, файл тяжелее.</p>
+        </div>
+
+        <div id="results" class="results" aria-label="Готовые файлы"></div>
       </section>
     </main>
   </div>
@@ -153,7 +152,7 @@
   <template id="colorRowTemplate">
     <div class="color-row">
       <span class="drag-handle" draggable="true" title="Перетащить, чтобы изменить порядок">⠿</span>
-      <input type="color" class="color-input" />
+      <input type="color" class="color-input" aria-label="Выбрать цвет" />
       <input
         type="text"
         class="color-hex"
@@ -163,7 +162,7 @@
         placeholder="#RRGGBB"
         aria-label="HEX-код цвета"
       />
-      <button type="button" class="btn-icon remove-color" title="Удалить цвет">✕</button>
+      <button type="button" class="btn-icon remove-color" title="Удалить цвет" aria-label="Удалить цвет">✕</button>
     </div>
   </template>
 
@@ -174,7 +173,7 @@
         <span class="result-name"></span>
         <span class="result-size"></span>
       </div>
-      <a class="btn btn-secondary result-download" download>Скачать</a>
+      <a class="btn btn-block result-download" download>Скачать</a>
     </div>
   </template>
 

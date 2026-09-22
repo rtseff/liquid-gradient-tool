@@ -127,9 +127,8 @@ uniform float u_scale;
 uniform float u_warp;
 uniform float u_softness;
 uniform vec2 u_seed;
-uniform float u_maskMode; // 0 = none, 1 = circle, 2 = custom image
+uniform float u_maskMode; // 0 = none, 1 = circle
 uniform float u_maskInvert;
-uniform sampler2D u_maskTex;
 uniform vec3 u_bgColor;
 uniform int u_colorCount;
 uniform vec3 u_colors[${MAX_COLORS}];
@@ -194,17 +193,7 @@ void main() {
     color = mix(color, u_colors[i + 1], t);
   }
 
-  if (u_maskMode > 1.5) {
-    // Custom uploaded image, stretched to fill the canvas. Brightness
-    // times alpha reads naturally for both kinds of mask images people
-    // tend to make: a white shape on black, or an opaque shape on a
-    // transparent background.
-    vec4 maskSample = texture(u_maskTex, uv);
-    float lum = dot(maskSample.rgb, vec3(0.299, 0.587, 0.114));
-    float inside = lum * maskSample.a;
-    if (u_maskInvert > 0.5) inside = 1.0 - inside;
-    color = mix(u_bgColor, color, inside);
-  } else if (u_maskMode > 0.5) {
+  if (u_maskMode > 0.5) {
     vec2 c = uv - 0.5;
     c.x *= u_resolution.x / u_resolution.y;
     float d = length(c) * 2.0;
