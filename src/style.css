@@ -9,7 +9,6 @@
   --accent-dim: #0c8a6a;
   --danger: #ff5d6c;
   --radius: 12px;
-  --topbar-h: 53px;
 }
 
 * {
@@ -223,23 +222,6 @@ input {
   color: var(--text-dim);
 }
 
-.field-row {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.checkbox-field {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.checkbox-field span {
-  color: var(--text);
-}
-
 .range-legend {
   display: flex;
   justify-content: space-between;
@@ -395,36 +377,6 @@ output {
 .btn-icon:disabled {
   opacity: 0.25;
   cursor: not-allowed;
-}
-
-/* --- Segmented control -------------------------------------------------- */
-
-.segmented {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  padding: 3px;
-  gap: 3px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  margin-bottom: 12px;
-}
-
-.segment {
-  border: none;
-  background: none;
-  color: var(--text-dim);
-  padding: 7px 10px;
-  border-radius: 7px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.segment[aria-checked='true'] {
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 /* --- Presets ------------------------------------------------------------ */

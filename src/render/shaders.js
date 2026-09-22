@@ -127,9 +127,6 @@ uniform float u_scale;
 uniform float u_warp;
 uniform float u_softness;
 uniform vec2 u_seed;
-uniform float u_maskMode; // 0 = none, 1 = circle
-uniform float u_maskInvert;
-uniform vec3 u_bgColor;
 uniform int u_colorCount;
 uniform vec3 u_colors[${MAX_COLORS}];
 uniform float u_stops[${MAX_COLORS}];
@@ -191,15 +188,6 @@ void main() {
     if (i + 1 >= u_colorCount) break;
     float t = smoothstep(u_stops[i], u_stops[i + 1], field);
     color = mix(color, u_colors[i + 1], t);
-  }
-
-  if (u_maskMode > 0.5) {
-    vec2 c = uv - 0.5;
-    c.x *= u_resolution.x / u_resolution.y;
-    float d = length(c) * 2.0;
-    float inside = 1.0 - smoothstep(0.96, 1.0, d);
-    if (u_maskInvert > 0.5) inside = 1.0 - inside;
-    color = mix(u_bgColor, color, inside);
   }
 
   fragColor = vec4(color, 1.0);

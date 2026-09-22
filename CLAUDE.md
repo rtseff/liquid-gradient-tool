@@ -64,8 +64,7 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   re-renders, using `state.duration` as the wall-clock loop period.
   There's no framework or reactivity layer: every control's event
   listener mutates `state` directly and, where needed, re-renders the
-  affected DOM (e.g. `renderColorList()`, `updateMaskUi()`,
-  `updateOutputMeta()`). Errors/success are reported inline via
+  affected DOM (e.g. `renderColorList()`, `updateOutputMeta()`). Errors/success are reported inline via
   `showStatus()`, not `alert()`. The global Ctrl+Z palette undo is
   skipped while a text/number input has focus (`isTextEditing()`).
 - **`src/render/shaders.js`** — GLSL source as template strings
@@ -131,14 +130,12 @@ If you add any new time-varying effect to the shader, it must be driven
 through this same phase→circle mapping, never through `phase` directly,
 or the exported loop will visibly jump at the seam.
 
-### Frame shape (circle mask)
+### Removed on purpose
 
-`state.maskMode` is `'none' | 'circle'` (UI: "Форма кадра" segmented
-control), mapped to `u_maskMode` 0/1 in the fragment shader. `'circle'`
-is a pure distance-field mask that blends the gradient against
-`state.bgColor` via `mix()` and supports `state.maskInvert`. Custom
-image masks were deliberately removed at the user's request — don't
-reintroduce them.
+The output is always a full-frame rectangle. Masks (a circle mask, and
+before it custom image masks) and a "glass" sphere-lighting mode
+existed at some point and were removed at the user's request — don't
+reintroduce them unless asked.
 
 ### Slider semantics worth knowing
 

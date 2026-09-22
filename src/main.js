@@ -16,9 +16,6 @@ const state = {
   softness: 0.3,
   speed: 0.5, // raw slider value 0..1, eased into an amplitude via speedToAmplitude()
   seed: [randomSeedValue(), randomSeedValue()],
-  maskMode: 'none', // 'none' | 'circle'
-  maskInvert: false,
-  bgColor: '#000000',
   width: 1600,
   height: 900,
   duration: 4,
@@ -85,10 +82,6 @@ const el = {
   softnessOut: document.getElementById('softnessOut'),
   speed: document.getElementById('speed'),
   speedOut: document.getElementById('speedOut'),
-  maskSegments: document.querySelectorAll('.segment[data-mask]'),
-  circleOptions: document.getElementById('circleOptions'),
-  maskInvert: document.getElementById('maskInvert'),
-  bgColor: document.getElementById('bgColor'),
   resolutionPreset: document.getElementById('resolutionPreset'),
   customSizeRow: document.getElementById('customSizeRow'),
   customWidth: document.getElementById('customWidth'),
@@ -327,33 +320,6 @@ el.newPatternBtn.addEventListener('click', () => {
   state.seed = [randomSeedValue(), randomSeedValue()];
 });
 
-// --- Frame shape (circle mask) --------------------------------------------
-
-function updateMaskUi() {
-  el.maskSegments.forEach((segment) => {
-    segment.setAttribute('aria-checked', String(segment.dataset.mask === state.maskMode));
-  });
-  el.circleOptions.hidden = state.maskMode !== 'circle';
-}
-
-el.maskSegments.forEach((segment) => {
-  segment.addEventListener('click', () => {
-    state.maskMode = segment.dataset.mask;
-    updateMaskUi();
-  });
-});
-
-el.maskInvert.addEventListener('change', () => {
-  state.maskInvert = el.maskInvert.checked;
-});
-
-el.bgColor.value = state.bgColor;
-el.bgColor.addEventListener('input', () => {
-  state.bgColor = el.bgColor.value;
-});
-
-updateMaskUi();
-
 // --- Output settings --------------------------------------------------------
 
 function updateOutputMeta() {
@@ -422,9 +388,6 @@ function currentParams() {
     loops: 1,
     speed: speedToAmplitude(state.speed),
     seed: state.seed,
-    maskMode: state.maskMode,
-    maskInvert: state.maskInvert,
-    bgColor: state.bgColor,
   };
 }
 

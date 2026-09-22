@@ -60,9 +60,6 @@ export class LiquidGradientRenderer {
       warp: gl.getUniformLocation(program, 'u_warp'),
       softness: gl.getUniformLocation(program, 'u_softness'),
       seed: gl.getUniformLocation(program, 'u_seed'),
-      maskMode: gl.getUniformLocation(program, 'u_maskMode'),
-      maskInvert: gl.getUniformLocation(program, 'u_maskInvert'),
-      bgColor: gl.getUniformLocation(program, 'u_bgColor'),
       colorCount: gl.getUniformLocation(program, 'u_colorCount'),
       colors: gl.getUniformLocation(program, 'u_colors'),
       stops: gl.getUniformLocation(program, 'u_stops'),
@@ -87,9 +84,6 @@ export class LiquidGradientRenderer {
    * @param {number} params.loops integer noise revolutions per full loop (keep at 1 unless you want busier motion)
    * @param {number} params.speed 0..1, how far the pattern travels per loop — the actual "fast/slow" control
    * @param {[number, number]} params.seed
-   * @param {'none'|'circle'} params.maskMode
-   * @param {boolean} params.maskInvert
-   * @param {string} params.bgColor hex color used outside the mask
    * @param {number} phase 0..1, position within the seamless loop
    */
   render(params, phase) {
@@ -116,10 +110,6 @@ export class LiquidGradientRenderer {
     gl.uniform1f(this.uniforms.warp, params.warp);
     gl.uniform1f(this.uniforms.softness, params.softness);
     gl.uniform2f(this.uniforms.seed, params.seed[0], params.seed[1]);
-    gl.uniform1f(this.uniforms.maskMode, params.maskMode === 'circle' ? 1 : 0);
-    gl.uniform1f(this.uniforms.maskInvert, params.maskInvert ? 1 : 0);
-    const [br, bg, bb] = hexToRgb01(params.bgColor || '#000000');
-    gl.uniform3f(this.uniforms.bgColor, br, bg, bb);
     gl.uniform1i(this.uniforms.colorCount, colorCount);
     gl.uniform3fv(this.uniforms.colors, colorFloats);
     gl.uniform1fv(this.uniforms.stops, stopFloats);
