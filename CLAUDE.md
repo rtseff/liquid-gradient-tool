@@ -147,6 +147,15 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   than the mock's icon set. The global `[hidden] { display: none
   !important }` rule exists because component rules like
   `.field { display: flex }` otherwise override the `hidden` attribute.
+- **Color contrast (WCAG 2.2 AA)** is a requirement, not a nicety. Text
+  must be ≥ 4.5:1 on `--panel` *and* `--field`, so nothing dimmer than
+  `--text-muted` (#85828c, 4.54:1 on field) may be used for text — the
+  mock's #4d4a54 was 2.2:1. Boundaries of interactive controls (inputs,
+  selects, color rows, buttons, the empty part of slider tracks, the
+  switch) use `--control-border` (≥ 3:1, 1.4.11); `--border` is only for
+  cards. Check with axe-core (`npm pack axe-core`, inject `axe.min.js`,
+  `axe.run` with the wcag2aa/wcag22aa tags) — it can't judge text over
+  the preset gradients or single-glyph icons, so compute those by hand.
 - **`src/presets.js`** — static palette data plus `presetGradientCss()`
   for the swatch UI. No other state.
 - **`vendor/`** — runtime dependencies checked into the repo instead of

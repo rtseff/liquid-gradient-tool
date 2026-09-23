@@ -1,4 +1,8 @@
-/* Tokens from the Figma layout ("maket", node 2001:115). */
+/* Tokens from the Figma layout ("maket", node 2001:115), adjusted for
+   WCAG 2.2 AA contrast (ratios below are against --panel / --field):
+   --text-muted was #4d4a54 (2.2:1), now the darkest grey of the same hue
+   that reaches 4.5:1 as text; --control-border is new — 3:1 boundary for
+   inputs, sliders and buttons (1.4.11 Non-text Contrast). */
 :root {
   --bg: #0a0a0c;
   --panel: #111113;
@@ -6,7 +10,8 @@
   --border: #2d2c33;
   --text: #ffffff;
   --text-dim: #8a8994;
-  --text-muted: #4d4a54;
+  --text-muted: #85828c; /* 5.0 : 1 / 4.5 : 1 */
+  --control-border: #6a6771; /* 3.4 : 1 / 3.1 : 1 */
   --accent: #1ce9b6;
   --accent-hover: #4df0c7;
   --on-accent: #111113;
@@ -201,7 +206,7 @@ input {
   height: 32px;
   padding: 0;
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   cursor: pointer;
 }
 
@@ -210,14 +215,21 @@ input {
   overflow: hidden;
 }
 
+/* Dark chip behind the name: white straight on the light end of a
+   palette (e.g. #e0f2fe) is only ~1.2:1; on the chip it's ≥ 7.5:1. */
 .preset-swatch span {
   position: absolute;
   bottom: 3px;
-  left: 5px;
+  left: 3px;
+  max-width: calc(100% - 6px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
   font-size: 10px;
   color: #fff;
   white-space: nowrap;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .preset-swatch:hover {
@@ -243,7 +255,7 @@ input {
   min-height: 36px;
   padding: 0 12px;
   background: var(--field);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 12px;
   transition: opacity 0.15s, border-color 0.15s;
 }
@@ -295,13 +307,15 @@ input[type='color']::-webkit-color-swatch-wrapper {
   padding: 0;
 }
 
+/* Border so a swatch close to the row color (e.g. near-black) is still
+   visible as a control. */
 input[type='color']::-webkit-color-swatch {
-  border: none;
+  border: 1px solid var(--control-border);
   border-radius: 4px;
 }
 
 input[type='color']::-moz-color-swatch {
-  border: none;
+  border: 1px solid var(--control-border);
   border-radius: 4px;
 }
 
@@ -319,8 +333,13 @@ input[type='color']::-moz-color-swatch {
   outline: none;
 }
 
+/* The hex field drops its own outline, so the row shows focus instead. */
 .color-row:focus-within {
-  border-color: var(--text-muted);
+  border-color: var(--accent);
+}
+
+.color-hex::placeholder {
+  color: var(--text-muted);
 }
 
 .add-color {
@@ -330,7 +349,7 @@ input[type='color']::-moz-color-swatch {
   gap: 8px;
   width: 100%;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 12px;
   background: none;
   color: var(--text-dim);
@@ -341,7 +360,7 @@ input[type='color']::-moz-color-swatch {
 
 .add-color:hover:not(:disabled) {
   color: var(--text);
-  border-color: var(--text-muted);
+  border-color: var(--text-dim);
 }
 
 .add-color:disabled {
@@ -403,7 +422,8 @@ output {
 }
 
 /* 24px hit area, 4px track, accent fill up to the thumb (--fill is set
-   from JS in bindRange), 12px white thumb. */
+   from JS in bindRange), 12px white thumb. The empty part of the track
+   uses --control-border, not --field, to stay at 3:1 on the panel. */
 input[type='range'] {
   --fill: 50%;
   -webkit-appearance: none;
@@ -418,13 +438,13 @@ input[type='range'] {
 input[type='range']::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(var(--accent), var(--accent)) 0 / var(--fill) 100% no-repeat, var(--field);
+  background: linear-gradient(var(--accent), var(--accent)) 0 / var(--fill) 100% no-repeat, var(--control-border);
 }
 
 input[type='range']::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: var(--field);
+  background: var(--control-border);
 }
 
 input[type='range']::-moz-range-progress {
@@ -504,7 +524,7 @@ input[type='range']:disabled {
   height: 24px;
   border-radius: 999px;
   background: var(--field);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   transition: background 0.15s, border-color 0.15s;
 }
 
@@ -556,7 +576,7 @@ select {
   width: 100%;
   height: 32px;
   padding: 0 12px;
-  border: none;
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   background: var(--field);
   color: var(--text);
@@ -720,7 +740,7 @@ select option {
 .progress-bar {
   flex: 1;
   height: 4px;
-  background: var(--field);
+  background: var(--control-border);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -845,7 +865,7 @@ select option {
 .result-download {
   display: block;
   padding: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   background: var(--field);
   color: var(--text);
@@ -856,7 +876,7 @@ select option {
 }
 
 .result-download:hover {
-  border-color: var(--text-muted);
+  border-color: var(--text-dim);
 }
 
 /* --- Narrower screens --------------------------------------------------- */
