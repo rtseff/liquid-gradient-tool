@@ -798,7 +798,7 @@ select option {
   top: 0;
   bottom: 0;
   z-index: 1;
-  width: min(330px, 30%);
+  width: min(174px, 15%); /* about one card */
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s;
