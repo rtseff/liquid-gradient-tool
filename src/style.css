@@ -1,14 +1,18 @@
+/* Tokens from the Figma layout ("maket", node 2001:115). */
 :root {
-  --bg: #0a0b0d;
-  --panel: #121417;
-  --panel-2: #17191d;
-  --border: #24272c;
-  --text: #e9edf1;
-  --text-dim: #9aa3ad;
-  --accent: #14e0ac;
-  --accent-dim: #0c8a6a;
+  --bg: #0a0a0c;
+  --panel: #111113;
+  --field: #1c1b1f;
+  --border: #2d2c33;
+  --text: #ffffff;
+  --text-dim: #8a8994;
+  --text-muted: #4d4a54;
+  --accent: #1ce9b6;
+  --accent-hover: #4df0c7;
+  --on-accent: #111113;
   --danger: #ff5d6c;
-  --radius: 12px;
+  --gap: 24px;
+  color-scheme: dark;
 }
 
 * {
@@ -25,514 +29,19 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: normal;
 }
 
 button,
 select,
 input {
   font: inherit;
+  color: inherit;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.app {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.topbar {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.brand-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #6dffd8, var(--accent) 60%, var(--accent-dim));
-  box-shadow: 0 0 12px var(--accent);
-}
-
-.topbar-hint {
-  color: var(--text-dim);
-  font-size: 13px;
-}
-
-/* --- Layout: settings on the left, preview + export on the right ------- */
-
-.layout {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 16px;
-  padding: 16px;
-}
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-
-.controls {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.stage {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  min-width: 0;
-}
-
-.canvas-wrap {
-  flex: 1 1 auto;
-  min-height: 240px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #07080a;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  overflow: hidden;
-  padding: 12px;
-}
-
-#previewCanvas {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: 6px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-}
-
-/* Phones/tablets: one column, live preview pinned on top while you tweak
-   the controls below it, and no scroll container nested inside the page. */
-@media (max-width: 900px) {
-  .app {
-    height: auto;
-  }
-
-  .layout {
-    display: flex;
-    flex-direction: column;
-    padding: 12px;
-    gap: 12px;
-  }
-
-  .stage {
-    display: contents;
-  }
-
-  .canvas-wrap {
-    order: 0;
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    height: 34vh;
-    min-height: 180px;
-    flex: none;
-    padding: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-  }
-
-  .controls {
-    order: 1;
-    overflow: visible;
-  }
-
-  .output {
-    order: 2;
-  }
-
-  .results {
-    order: 3;
-  }
-}
-
-/* --- Groups & fields ---------------------------------------------------- */
-
-.control-group h2 {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-dim);
-  margin: 0 0 10px;
-}
-
-.group-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.group-header h2 {
-  margin: 0;
-}
-
-.header-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.count {
-  margin-left: 4px;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--text-dim);
-  opacity: 0.7;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  margin-bottom: 12px;
-}
-
-.field > span {
-  display: flex;
-  justify-content: space-between;
-  color: var(--text-dim);
-}
-
-.range-legend {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-dim);
-  opacity: 0.75;
-  margin-top: -2px;
-}
-
-input[type='range'] {
-  width: 100%;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-input[type='number'],
-select {
-  width: 100%;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 7px 8px;
-  font-size: 13px;
-}
-
-input[type='color'] {
-  width: 40px;
-  height: 32px;
-  flex: none;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-output {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.hint {
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.4;
-  margin: 4px 0 0;
-}
-
-/* --- Buttons ------------------------------------------------------------ */
-
-.btn {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  color: var(--text);
-  padding: 9px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.btn:hover {
-  border-color: var(--accent-dim);
-}
-
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btn:disabled:hover {
-  border-color: var(--border);
-}
-
-.btn-block {
-  width: 100%;
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: #002018;
-  border-color: var(--accent);
-  font-weight: 600;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #33e9bd;
-}
-
-.btn-meta {
-  font-size: 11px;
-  font-weight: 400;
-  opacity: 0.75;
-  font-variant-numeric: tabular-nums;
-}
-
-.btn-ghost {
-  min-width: 32px;
-  height: 32px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: none;
-  color: var(--text);
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.btn-ghost:hover:not(:disabled) {
-  background: var(--panel-2);
-  border-color: var(--border);
-}
-
-.btn-ghost:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.btn-ghost-text {
-  font-size: 12px;
-  padding: 0 10px;
-  color: var(--accent);
-}
-
-.btn-icon {
-  width: 32px;
-  height: 32px;
-  flex: none;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.btn-icon:hover:not(:disabled) {
-  color: var(--danger);
-  background: rgba(255, 93, 108, 0.08);
-}
-
-.btn-icon:disabled {
-  opacity: 0.25;
-  cursor: not-allowed;
-}
-
-/* --- Presets ------------------------------------------------------------ */
-
-.preset-list {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.preset-swatch {
-  height: 44px;
-  padding: 0;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-}
-
-.preset-swatch:hover {
-  outline: 2px solid var(--accent-dim);
-  outline-offset: 1px;
-}
-
-.preset-swatch[aria-pressed='true'] {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.preset-swatch span {
-  position: absolute;
-  bottom: 3px;
-  left: 5px;
-  font-size: 10px;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-}
-
-/* --- Color list --------------------------------------------------------- */
-
-.color-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.color-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 5px 4px 5px 6px;
-  transition: opacity 0.15s, border-color 0.15s;
-}
-
-.color-row.dragging {
-  opacity: 0.4;
-}
-
-.color-row.drag-over {
-  border-color: var(--accent);
-}
-
-.drag-handle {
-  cursor: grab;
-  color: var(--text-dim);
-  font-size: 15px;
-  line-height: 1;
-  padding: 6px 2px;
-  user-select: none;
-  touch-action: none;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
-.color-hex {
-  flex: 1;
-  min-width: 0;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 8px;
-  color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-}
-
-.color-hex:focus {
-  outline: none;
-  border-color: var(--accent-dim);
-}
-
-.color-row-single {
-  padding-left: 6px;
-}
-
-.field.is-disabled {
-  opacity: 0.45;
-}
-
-input[type='range']:disabled {
-  cursor: not-allowed;
-}
-
-/* --- Toggle switch ------------------------------------------------------ */
-
-.switch {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.switch input {
-  position: absolute;
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  cursor: pointer;
-}
-
-.switch-track {
-  width: 36px;
-  height: 20px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  position: relative;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.switch-track::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text-dim);
-  transition: transform 0.15s, background 0.15s;
-}
-
-.switch input:checked + .switch-track {
-  background: var(--accent-dim);
-  border-color: var(--accent);
-}
-
-.switch input:checked + .switch-track::after {
-  transform: translateX(16px);
-  background: #fff;
-}
-
-.switch input:focus-visible + .switch-track {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -546,62 +55,671 @@ input[type='range']:disabled {
   white-space: nowrap;
 }
 
-/* --- Output panel ------------------------------------------------------- */
+/* --- Layout -------------------------------------------------------------
+   Wide screens: [controls 568] [preview] [export 332], gallery below.   */
 
-.output {
-  flex: none;
-  padding: 14px 16px;
-}
-
-.output-settings {
+.layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0 16px;
+  grid-template-columns: 568px minmax(0, 1fr) 332px;
+  grid-template-areas:
+    'controls preview output'
+    'gallery  gallery gallery';
+  align-items: stretch;
+  gap: 40px var(--gap);
+  padding: 40px;
+  max-width: 1920px;
+  margin: 0 auto;
 }
 
-.custom-size .size-inputs {
+.controls {
+  grid-area: controls;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.controls-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  min-width: 0;
+}
+
+.card-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 14px;
+}
+
+.card h2,
+.gallery h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
   color: var(--text-dim);
 }
 
-#exportBtn {
-  margin-top: 2px;
-  padding: 11px 14px;
+.header-actions {
+  display: flex;
+  gap: 4px;
+  /* The header is 14px tall in the layout; the buttons overhang it. */
+  margin: -6px -6px -6px 0;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  flex: none;
+}
+
+.icon-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.icon-btn-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-right: -6px;
+}
+
+.icon-btn-muted:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.icon-btn-chevron {
+  transition: transform 0.15s;
+}
+
+.icon-btn-chevron[aria-expanded='true'] {
+  transform: rotate(180deg);
+}
+
+.text-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.text-btn:hover {
+  color: var(--accent-hover);
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* --- Colors card -------------------------------------------------------- */
+
+.controls-row > .card:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preset-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.preset-swatch {
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.preset-swatch {
+  position: relative;
+  overflow: hidden;
+}
+
+.preset-swatch span {
+  position: absolute;
+  bottom: 3px;
+  left: 5px;
+  font-size: 10px;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.preset-swatch:hover {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 1px;
+}
+
+.preset-swatch[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.color-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  padding: 0 12px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+
+.color-row.dragging {
+  opacity: 0.4;
+}
+
+.color-row.drag-over {
+  border-color: var(--accent);
+}
+
+.drag-handle {
+  margin: 0 -6px 0 -4px;
+  padding: 6px 2px;
+  flex: none;
   font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.color-index {
+  width: 16px;
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+input[type='color'] {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+input[type='color']::-webkit-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+input[type='color']::-moz-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+.color-hex {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 0;
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.color-hex:focus {
+  outline: none;
+}
+
+.color-row:focus-within {
+  border-color: var(--text-muted);
+}
+
+.add-color {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-color:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.add-color:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* --- Sliders ------------------------------------------------------------ */
+
+.controls-row > .card:last-child,
+.grain-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.slider-compact {
+  gap: 6px;
+}
+
+.slider-compact .slider-labels {
+  font-size: 11px;
+}
+
+output {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.range-legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 24px hit area, 4px track, accent fill up to the thumb (--fill is set
+   from JS in bindRange), 12px white thumb. */
+input[type='range'] {
+  --fill: 50%;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(var(--accent), var(--accent)) 0 / var(--fill) 100% no-repeat, var(--field);
+}
+
+input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--field);
+}
+
+input[type='range']::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+}
+
+input[type='range']:disabled {
+  cursor: not-allowed;
+}
+
+.slider.is-disabled {
+  opacity: 0.45;
+}
+
+/* --- Grain card --------------------------------------------------------- */
+
+.grain-card {
+  display: flex;
+  gap: var(--gap);
+  align-items: flex-start;
+}
+
+.grain-main,
+.grain-side {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.grain-side {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+  /* The header is 14px tall in the layout; the toggle overhangs it. */
+  margin: -5px 0;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch-track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.switch input:checked + .switch-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch input:checked + .switch-track::after {
+  transform: translateX(20px);
+  background: #fff;
+}
+
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Fields (selects, number inputs) ------------------------------------ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.input,
+select {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.select-wrap {
+  display: block;
+}
+
+select {
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+select option {
+  background: var(--field);
+}
+
+.input::-webkit-inner-spin-button,
+.input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* --- Preview ------------------------------------------------------------ */
+
+.canvas-wrap {
+  grid-area: preview;
+  position: relative;
+  min-width: 0;
+  min-height: 320px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+/* Absolutely positioned so the canvas's intrinsic size (the export size,
+   e.g. 1600×900) never feeds back into the grid row height. */
+.canvas-box {
+  position: absolute;
+  inset: clamp(16px, 5%, 96px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#previewCanvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 16px;
+}
+
+/* --- Export panel ------------------------------------------------------- */
+
+.output {
+  grid-area: output;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.output-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.size-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+}
+
+.field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.field-format {
+  width: 180px;
+  max-width: 100%;
 }
 
 .checkbox-field {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
-  color: var(--text);
+  min-height: 36px;
+  font-size: 12px;
   cursor: pointer;
 }
 
 .checkbox-field input {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   margin: 0;
+  flex: none;
   accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.export-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.export-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.export-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.export-meta {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
 }
 
 .progress {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: -8px;
   font-size: 12px;
   color: var(--text-dim);
 }
 
 .progress-bar {
   flex: 1;
-  height: 6px;
-  background: var(--panel-2);
-  border-radius: 4px;
+  height: 4px;
+  background: var(--field);
+  border-radius: 2px;
   overflow: hidden;
 }
 
@@ -613,7 +731,7 @@ input[type='range']:disabled {
 }
 
 .status {
-  margin: 10px 0 0;
+  margin: -8px 0 0;
   font-size: 12px;
   line-height: 1.4;
 }
@@ -627,62 +745,175 @@ input[type='range']:disabled {
 }
 
 .output .hint {
-  margin-top: 10px;
+  margin-top: -8px;
 }
 
-/* --- Results ------------------------------------------------------------ */
+/* --- Gallery ------------------------------------------------------------ */
+
+.gallery {
+  grid-area: gallery;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 8px;
+  min-width: 0;
+}
+
+.gallery h2 {
+  font-size: 12px;
+}
+
+.gallery-scroll {
+  position: relative;
+}
+
+/* Fade on the right edge while more cards are hidden off-screen
+   ("shadow-scroll" in the layout). */
+.gallery-scroll::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(330px, 30%);
+  background: linear-gradient(to right, rgba(10, 10, 12, 0), var(--bg));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.gallery-scroll.has-more::after {
+  opacity: 1;
+}
 
 .results {
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  flex: none;
-}
-
-.results:empty {
-  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 .result-card {
   flex: none;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px;
-  width: 200px;
+  width: 174px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
 }
 
 .result-preview {
-  border-radius: 6px;
+  height: 100px;
+  border-radius: 10px;
   overflow: hidden;
   background: #000;
-  max-height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .result-preview img,
 .result-preview video {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .result-meta {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-dim);
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  min-width: 0;
 }
 
 .result-name {
-  color: var(--text);
+  color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.result-size {
+  font-weight: 700;
+}
+
+.result-download {
+  display: block;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.result-download:hover {
+  border-color: var(--text-muted);
+}
+
+/* --- Narrower screens --------------------------------------------------- */
+
+/* Not enough room for three columns: export panel moves under the preview. */
+@media (max-width: 1439px) {
+  .layout {
+    grid-template-columns: 568px minmax(0, 1fr);
+    grid-template-areas:
+      'controls preview'
+      'controls output'
+      'gallery  gallery';
+    align-items: start;
+    padding: 24px;
+  }
+
+  .canvas-wrap {
+    height: 420px;
+  }
+}
+
+/* Phones/tablets: one column, live preview pinned on top while you tweak
+   the controls below it. */
+@media (max-width: 1023px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'preview'
+      'controls'
+      'output'
+      'gallery';
+    gap: 16px;
+    padding: 12px;
+  }
+
+  .canvas-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 34vh;
+    min-height: 180px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  }
+}
+
+@media (max-width: 599px) {
+  .controls-row,
+  .grain-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .grain-main,
+  .grain-side {
+    flex: none;
+  }
+
+  .card {
+    padding: 20px;
+  }
 }

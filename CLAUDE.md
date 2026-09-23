@@ -120,11 +120,19 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   frames at default settings (1600×900 → 480×270 GIF) were a cropped
   top-left corner of the full-size render. Any new export path must go
   through `setBusy(true)` too.
-- **UI layout**: left `.controls` panel = look of the gradient; right
-  `.stage` = canvas + `.output` panel (size/duration/FPS/export buttons)
-  + results strip. Under 900px `.stage` becomes `display: contents` so
-  its children can be reordered with the controls (canvas sticky on top,
-  no nested scroll container). The global `[hidden] { display: none
+- **UI layout** follows the Figma mock (file `crJpeY2AsxP794ZHPIIQwd`,
+  node `2001:115`; its colors are the tokens on `:root` in `style.css`).
+  `.layout` is one flat CSS grid with named areas: `.controls` (colors +
+  flow cards side by side, grain card below, 568px) | `.canvas-wrap`
+  preview | `.output` export card (332px), and the `.gallery` of
+  results underneath (hidden until the first export). ≤1439px the export
+  card moves under the preview; ≤1023px it's one column with the preview
+  sticky on top. The canvas sits in an absolutely positioned
+  `.canvas-box` so its intrinsic size (the export size) never stretches
+  the grid row. Sliders are restyled native ranges: `bindRange()` writes
+  the `--fill` percentage the WebKit track gradient uses. Icons are text
+  glyphs (↶ ↷ ▾ ⠿ ✕ ↻) on purpose — the user asked to keep them rather
+  than the mock's icon set. The global `[hidden] { display: none
   !important }` rule exists because component rules like
   `.field { display: flex }` otherwise override the `hidden` attribute.
 - **`src/presets.js`** — static palette data plus `presetGradientCss()`
