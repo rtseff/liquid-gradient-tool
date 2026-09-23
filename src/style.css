@@ -789,31 +789,47 @@ select option {
   position: relative;
 }
 
-/* Fade on the right edge while more cards are hidden off-screen
-   ("shadow-scroll" in the layout). */
+/* Edge fades while cards are scrolled out of view on that side
+   ("shadow-scroll" in the layout; the left one mirrors it). */
+.gallery-scroll::before,
 .gallery-scroll::after {
   content: '';
   position: absolute;
   top: 0;
-  right: 0;
   bottom: 0;
+  z-index: 1;
   width: min(330px, 30%);
-  background: linear-gradient(to right, rgba(10, 10, 12, 0), var(--bg));
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s;
 }
 
-.gallery-scroll.has-more::after {
+.gallery-scroll::before {
+  left: 0;
+  background: linear-gradient(to left, rgba(10, 10, 12, 0), var(--bg));
+}
+
+.gallery-scroll::after {
+  right: 0;
+  background: linear-gradient(to right, rgba(10, 10, 12, 0), var(--bg));
+}
+
+.gallery-scroll.more-before::before,
+.gallery-scroll.more-after::after {
   opacity: 1;
 }
 
+/* No visible scrollbar: the strip scrolls with the mouse wheel (main.js),
+   trackpad, Shift+wheel and Tab through the download buttons. */
 .results {
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-width: none;
+}
+
+.results::-webkit-scrollbar {
+  display: none;
 }
 
 .result-card {

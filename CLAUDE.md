@@ -144,7 +144,10 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   the grid row. Sliders are restyled native ranges: `bindRange()` writes
   the `--fill` percentage the WebKit track gradient uses. Icons are text
   glyphs (↶ ↷ ▾ ⠿ ✕ ↻) on purpose — the user asked to keep them rather
-  than the mock's icon set. The global `[hidden] { display: none
+  than the mock's icon set. The gallery strip hides its scrollbar, so
+  `main.js` maps a vertical mouse wheel to horizontal scroll (handing it
+  back to the page at either end) and toggles `.more-before` /
+  `.more-after` for the edge fades. The global `[hidden] { display: none
   !important }` rule exists because component rules like
   `.field { display: flex }` otherwise override the `hidden` attribute.
 - **Color contrast (WCAG 2.2 AA)** is a requirement, not a nicety. Text

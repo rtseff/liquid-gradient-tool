@@ -633,12 +633,27 @@ function addResult({ name, blob, isVideo, width, height }) {
   updateGalleryFade();
 }
 
-// Right-edge fade only while there are cards scrolled out of view.
+// Fade on each edge only while there are cards scrolled out of view there.
 function updateGalleryFade() {
   const { scrollLeft, scrollWidth, clientWidth } = el.results;
-  el.galleryScroll.classList.toggle('has-more', scrollLeft + clientWidth < scrollWidth - 1);
+  el.galleryScroll.classList.toggle('more-before', scrollLeft > 1);
+  el.galleryScroll.classList.toggle('more-after', scrollLeft + clientWidth < scrollWidth - 1);
 }
 el.results.addEventListener('scroll', updateGalleryFade, { passive: true });
+
+// The strip has no scrollbar, so a plain vertical mouse wheel scrolls it
+// sideways. At either end the event is left alone and scrolls the page;
+// trackpads (which already send deltaX) are not touched.
+el.results.addEventListener('wheel', (e) => {
+  if (e.deltaX !== 0 || e.deltaY === 0 || e.shiftKey || e.ctrlKey) return;
+  const { scrollLeft, scrollWidth, clientWidth } = el.results;
+  const atStart = scrollLeft <= 0;
+  const atEnd = scrollLeft + clientWidth >= scrollWidth - 1;
+  if ((e.deltaY < 0 && atStart) || (e.deltaY > 0 && atEnd)) return;
+  e.preventDefault();
+  // Firefox reports line-based deltas for mouse wheels.
+  el.results.scrollLeft += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+}, { passive: false });
 window.addEventListener('resize', updateGalleryFade);
 
 const renderFrame = (phase) => renderer.render(currentParams(), phase);
