@@ -3,6 +3,7 @@ import { exportWebm } from './export/exportWebm.js';
 import { exportVideo } from './export/exportVideo.js';
 import { exportGif } from './export/exportGif.js';
 import { PRESETS, presetGradientCss } from './presets.js';
+import { loadSettings, saveSettings, saveResult, loadResults, deleteResults, MAX_SAVED_RESULTS } from './session.js';
 
 const MAX_COLORS = 6;
 const MIN_COLORS = 2;
@@ -34,6 +35,11 @@ const state = {
   removeAlpha: true,
   gifWidth: 480,
 };
+
+// Factory values (double-click / reset targets), then the previous
+// session's settings on top — see session.js.
+const DEFAULTS = structuredClone(state);
+Object.assign(state, loadSettings());
 
 const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF' };
 
@@ -352,7 +358,7 @@ updateHistoryButtons();
 // --- Sliders -------------------------------------------------------------
 
 function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
-  const defaultValue = state[key];
+  const defaultValue = DEFAULTS[key];
   const min = parseFloat(input.min);
   const max = parseFloat(input.max);
   const apply = (value) => {
@@ -363,7 +369,7 @@ function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
     output.textContent = format(value);
     onChange?.();
   };
-  apply(defaultValue);
+  apply(state[key]);
   input.title = 'Двойной клик — значение по умолчанию';
   input.addEventListener('input', () => apply(parseFloat(input.value)));
   input.addEventListener('dblclick', () => apply(defaultValue));
@@ -435,7 +441,7 @@ el.grainColorHex.addEventListener('change', () => {
 });
 el.grainColorHex.addEventListener('focus', () => el.grainColorHex.select());
 
-const defaultGrainColor = state.grainColor;
+const defaultGrainColor = DEFAULTS.grainColor;
 el.grainColorReset.addEventListener('click', () => {
   state.grainColor = defaultGrainColor;
   el.grainColor.value = defaultGrainColor;
@@ -600,11 +606,22 @@ function formatBytes(bytes) {
     : `${Math.max(1, Math.round(bytes / 1024))} КБ`;
 }
 
-function addResult({ name, blob, isVideo, width, height }) {
+// Every file of the most recent export run (WebM + MP4 is one run, two
+// files) carries the "Последнее" badge.
+let latestBatch = 0;
+
+function updateLatestBadges() {
+  el.results.querySelectorAll('.result-card').forEach((card) => {
+    card.querySelector('.result-badge').hidden = Number(card.dataset.batch) !== latestBatch;
+  });
+}
+
+function renderResult({ id, name, blob, isVideo, width, height, batch }) {
   const node = resultTemplate.content.firstElementChild.cloneNode(true);
+  node.dataset.batch = String(batch);
+  if (id !== undefined) node.dataset.id = String(id);
   const url = URL.createObjectURL(blob);
   const previewSlot = node.querySelector('.result-preview');
-  previewSlot.style.aspectRatio = `${width} / ${height}`;
   if (isVideo) {
     const video = document.createElement('video');
     video.src = url;
@@ -620,6 +637,7 @@ function addResult({ name, blob, isVideo, width, height }) {
     previewSlot.appendChild(img);
   }
   node.querySelector('.result-name').textContent = name;
+  node.querySelector('.result-name').title = `${name} · ${width}×${height}`;
   node.querySelector('.result-size').textContent = formatBytes(blob.size);
   const link = node.querySelector('.result-download');
   link.href = url;
@@ -629,7 +647,48 @@ function addResult({ name, blob, isVideo, width, height }) {
   link.textContent = `Скачать ${FORMAT_LABELS[ext] ?? ext.toUpperCase()}`;
   el.results.prepend(node);
   el.gallery.hidden = false;
+  latestBatch = Math.max(latestBatch, batch);
+  return node;
+}
+
+function removeCard(card) {
+  card.querySelectorAll('video, img').forEach((media) => URL.revokeObjectURL(media.src));
+  card.remove();
+}
+
+// Newly exported file: show it, then store it for the next session and
+// drop the oldest cards/files beyond MAX_SAVED_RESULTS.
+async function addResult(entry) {
+  const node = renderResult(entry);
+  updateLatestBadges();
   el.results.scrollLeft = 0;
+  updateGalleryFade();
+  try {
+    node.dataset.id = String(await saveResult(entry));
+  } catch (err) {
+    console.warn('Result not saved for the next session:', err);
+  }
+  const cards = [...el.results.querySelectorAll('.result-card')];
+  const excess = cards.slice(MAX_SAVED_RESULTS);
+  if (excess.length) {
+    const ids = excess.map((card) => Number(card.dataset.id)).filter(Number.isFinite);
+    excess.forEach(removeCard);
+    updateGalleryFade();
+    if (ids.length) deleteResults(ids).catch((err) => console.warn(err));
+  }
+}
+
+async function restoreResults() {
+  let saved;
+  try {
+    saved = await loadResults();
+  } catch (err) {
+    console.warn('Saved results not restored:', err);
+    return;
+  }
+  // Oldest first, each prepended, so the newest ends up on the left.
+  saved.forEach(renderResult);
+  updateLatestBadges();
   updateGalleryFade();
 }
 
@@ -658,7 +717,7 @@ window.addEventListener('resize', updateGalleryFade);
 
 const renderFrame = (phase) => renderer.render(currentParams(), phase);
 
-async function exportOneVideo(container, stepLabel) {
+async function exportOneVideo(container, stepLabel, batch) {
   const { width, height, fps, duration } = state;
   const bitrate = Math.round(state.bitrate * 1e6);
   const label = container === 'webm' ? 'WebM' : 'MP4';
@@ -669,11 +728,11 @@ async function exportOneVideo(container, stepLabel) {
       ? await exportWebm({ canvas, renderFrame, fps, duration, bitrate, onProgress })
       : await exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress });
   const name = `liquid-gradient-${width}x${height}.${container}`;
-  addResult({ name, blob, isVideo: true, width, height });
+  addResult({ name, blob, isVideo: true, width, height, batch });
   return `${name} (${formatBytes(blob.size)})`;
 }
 
-async function exportGifFile() {
+async function exportGifFile(batch) {
   const { width, height } = gifSize();
   const fps = Math.min(state.fps, 30);
   renderer.setSize(width, height);
@@ -690,18 +749,19 @@ async function exportGifFile() {
     },
   });
   const name = `liquid-gradient-${width}x${height}.gif`;
-  addResult({ name, blob, isVideo: false, width, height });
+  addResult({ name, blob, isVideo: false, width, height, batch });
   return `${name} (${formatBytes(blob.size)})`;
 }
 
 el.exportBtn.addEventListener('click', async () => {
   setBusy(true);
+  const batch = Date.now();
   const done = [];
   const failed = [];
   try {
     if (state.format === 'gif') {
       try {
-        done.push(await exportGifFile());
+        done.push(await exportGifFile(batch));
       } catch (err) {
         console.error(err);
         failed.push(`GIF: ${err.message}`);
@@ -711,7 +771,7 @@ el.exportBtn.addEventListener('click', async () => {
       for (const [i, container] of containers.entries()) {
         const step = containers.length > 1 ? `${i + 1}/${containers.length} · ` : '';
         try {
-          done.push(await exportOneVideo(container, step));
+          done.push(await exportOneVideo(container, step, batch));
         } catch (err) {
           // One format failing (typically no H.264 encoder) must not throw
           // away the other one that already succeeded.
@@ -728,3 +788,22 @@ el.exportBtn.addEventListener('click', async () => {
   if (failed.length) parts.push(`Не удалось — ${failed.join('; ')}.`);
   showStatus(parts.join(' '), failed.length ? 'error' : 'success');
 });
+
+// --- Session ---------------------------------------------------------------
+//
+// Every setting lives in `state` and only user input changes it, so one
+// debounced save after any input/change/click (plus on leaving the page)
+// covers all controls — including palette edits, undo and "Новый узор".
+
+let saveTimer = 0;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveSettings(state), 300);
+}
+['input', 'change', 'click', 'drop'].forEach((type) => document.addEventListener(type, scheduleSave, true));
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey) scheduleSave();
+});
+window.addEventListener('pagehide', () => saveSettings(state));
+
+restoreResults();

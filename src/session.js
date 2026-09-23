@@ -1,0 +1,116 @@
+// Session persistence: the settings go to localStorage, exported files
+// (Blobs, often several MB) go to IndexedDB. Both are per-browser and
+// per-origin; every call fails soft so a blocked or full storage never
+// breaks the tool itself.
+
+const SETTINGS_KEY = 'liquid-gradient:settings:v1';
+const DB_NAME = 'liquid-gradient';
+const DB_VERSION = 1;
+const STORE = 'results';
+
+// Oldest results beyond this are dropped from storage (and the gallery).
+export const MAX_SAVED_RESULTS = 30;
+
+// --- Settings ---------------------------------------------------------------
+
+const HEX = /^#[0-9a-f]{6}$/;
+
+// Per-key checks: a saved value is used only if it has the right shape,
+// otherwise the default stays. Ranges mirror the controls in index.html.
+const numberIn = (min, max) => (v) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+const oneOf = (...values) => (v) => values.includes(v);
+const VALIDATORS = {
+  colors: (v) => Array.isArray(v) && v.length >= 2 && v.length <= 6 && v.every((c) => typeof c === 'string' && HEX.test(c)),
+  scale: numberIn(0.6, 5),
+  warp: numberIn(0, 2.5),
+  softness: numberIn(0, 1),
+  speed: numberIn(0, 1),
+  seed: (v) => Array.isArray(v) && v.length === 2 && v.every(numberIn(-1e6, 1e6)),
+  grainEnabled: (v) => typeof v === 'boolean',
+  grainSize: (v) => Number.isInteger(v) && v >= 1 && v <= 8,
+  grainDensity: numberIn(0.02, 1),
+  grainOpacity: numberIn(0.02, 1),
+  grainVariance: numberIn(0, 1),
+  grainSoftness: numberIn(0, 1),
+  grainBlend: oneOf('normal', 'overlay', 'softlight'),
+  grainColor: (v) => typeof v === 'string' && HEX.test(v),
+  width: (v) => Number.isInteger(v) && v >= 64 && v <= 3840 && v % 2 === 0,
+  height: (v) => Number.isInteger(v) && v >= 64 && v <= 3840 && v % 2 === 0,
+  duration: (v) => Number.isInteger(v) && v >= 1 && v <= 10,
+  fps: oneOf(24, 30, 60),
+  format: oneOf('webm+mp4', 'webm', 'mp4', 'gif'),
+  bitrate: numberIn(0.5, 10),
+  removeAlpha: (v) => typeof v === 'boolean',
+  gifWidth: numberIn(240, 960),
+};
+
+export function loadSettings() {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null');
+  } catch {
+    return {};
+  }
+  if (!saved || typeof saved !== 'object') return {};
+  const result = {};
+  for (const [key, isValid] of Object.entries(VALIDATORS)) {
+    if (key in saved && isValid(saved[key])) result[key] = saved[key];
+  }
+  return result;
+}
+
+export function saveSettings(state) {
+  const data = {};
+  for (const key of Object.keys(VALIDATORS)) data[key] = state[key];
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn('Settings not saved:', err);
+  }
+}
+
+// --- Exported files ---------------------------------------------------------
+
+let dbPromise = null;
+
+function openDb() {
+  dbPromise ??= new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  return dbPromise;
+}
+
+function transact(mode, run) {
+  return openDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, mode);
+        const value = run(tx.objectStore(STORE));
+        tx.oncomplete = () => resolve(value.result ?? value);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      }),
+  );
+}
+
+// entry: { name, blob, isVideo, width, height, batch } → resolves to its id.
+export function saveResult(entry) {
+  return transact('readwrite', (store) => store.add(entry));
+}
+
+// All saved results, oldest first (ids are auto-incremented).
+export function loadResults() {
+  return transact('readonly', (store) => store.getAll());
+}
+
+export function deleteResults(ids) {
+  return transact('readwrite', (store) => {
+    ids.forEach((id) => store.delete(id));
+    return {};
+  });
+}
