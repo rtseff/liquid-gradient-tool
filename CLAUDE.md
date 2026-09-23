@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 "liquid"/mesh gradients and exporting a seamlessly looping video/GIF for
 use as a hero-section background. Plain ES modules, no framework, no
 build step, no `package.json` — `index.html` loads `src/main.js`
-directly via `<script type="module">`.
+directly via `<script type="module">`
+(through `src/boot.js`, see below).
 
 ## Running locally
 
@@ -57,6 +58,17 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
 
 ## Architecture
 
+- **`src/boot.js`** — the entry point. Touch-first devices
+  (`(hover: none) and (pointer: coarse)`: phones, tablets) get a
+  "desktop only" banner (`.desktop-only`, swapped in by the same media
+  query in `style.css`) and `main.js` is never imported, so no WebGL
+  context or render loop starts there. On desktop it sets
+  `document.documentElement.style.zoom` to
+  `max(1, min(innerWidth / 1920, innerHeight / 1080))` (the mock is
+  1920×1080; 2560×1440 → 1.33) and then imports `main.js`. Nothing in
+  the app reads pointer coordinates, so CSS `zoom` is safe; if you add
+  something that does, remember `getBoundingClientRect()` returns
+  zoomed values.
 - **`src/main.js`** — the entire UI/state layer. One mutable `state`
   object; `currentParams()` derives shader-ready params from it (e.g.
   `speedToAmplitude()` applies a cubic ease to the speed slider — see

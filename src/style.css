@@ -598,7 +598,9 @@ select option {
   grid-area: preview;
   position: relative;
   min-width: 0;
-  min-height: 320px;
+  /* 701px = preview height in the mock; keeps it full size even while
+     the grain card is collapsed. Overridden below 1440px. */
+  min-height: 701px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 24px;
@@ -873,6 +875,7 @@ select option {
 
   .canvas-wrap {
     height: 420px;
+    min-height: 320px;
   }
 }
 
@@ -916,4 +919,50 @@ select option {
   .card {
     padding: 20px;
   }
+}
+
+/* --- Desktop only ------------------------------------------------------- */
+
+/* Touch-first devices get this banner instead of the app (boot.js uses
+   the same media query to skip loading main.js). */
+.desktop-only {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .layout {
+    display: none;
+  }
+
+  .desktop-only {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 16px;
+  }
+}
+
+.desktop-only-card {
+  max-width: 360px;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  text-align: center;
+}
+
+.desktop-only-card h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.desktop-only-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
 }
