@@ -7,205 +7,224 @@
   <link rel="stylesheet" href="src/style.css" />
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-dot"></span>
-        <span>Liquid Gradient Tool</span>
-      </div>
-      <div class="topbar-hint">Анимированные жидкие градиенты для hero-секций · экспорт в WebM / MP4 / GIF</div>
-    </header>
+  <h1 class="visually-hidden">Liquid Gradient Tool</h1>
 
-    <main class="layout">
-      <section class="panel controls" aria-label="Настройки градиента">
-        <div class="control-group">
-          <h2>Пресеты</h2>
-          <div id="presetList" class="preset-list"></div>
-        </div>
 
-        <div class="control-group">
-          <div class="group-header">
-            <h2>Цвета <span id="colorCount" class="count"></span></h2>
+  <main class="layout">
+    <section class="controls" aria-label="Настройки градиента">
+      <div class="controls-row">
+        <div class="card">
+          <div class="card-header">
+            <h2>Цвета (<span id="colorCount"></span>)</h2>
             <div class="header-actions">
-              <button id="undoColorBtn" class="btn-ghost" type="button" title="Отменить (Ctrl+Z)" aria-label="Отменить" disabled>↶</button>
-              <button id="redoColorBtn" class="btn-ghost" type="button" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить" disabled>↷</button>
+              <button id="undoColorBtn" class="icon-btn" type="button" title="Отменить (Ctrl+Z)" aria-label="Отменить" disabled>↶</button>
+              <button id="redoColorBtn" class="icon-btn" type="button" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить" disabled>↷</button>
+              <button id="presetToggle" class="icon-btn icon-btn-chevron" type="button" title="Готовые палитры" aria-label="Готовые палитры" aria-expanded="false" aria-controls="presetList">▾</button>
             </div>
           </div>
+          <div id="presetList" class="preset-list" hidden></div>
           <div id="colorList" class="color-list"></div>
-          <button id="addColorBtn" class="btn btn-block" type="button">+ Добавить цвет</button>
+          <button id="addColorBtn" class="add-color" type="button">
+            <span id="addColorLabel">+ Добавить цвет</span>
+          </button>
         </div>
 
-        <div class="control-group">
-          <div class="group-header">
+        <div class="card">
+          <div class="card-header">
             <h2>Форма потока</h2>
-            <div class="header-actions">
-              <button id="newPatternBtn" class="btn-ghost btn-ghost-text" type="button" title="Тот же характер движения, другой рисунок">↻ Новый узор</button>
-            </div>
+            <button id="newPatternBtn" class="text-btn" type="button" title="Тот же характер движения, другой рисунок">↻ Новый узор</button>
           </div>
-          <label class="field">
-            <span>Масштаб узора <output id="scaleOut"></output></span>
-            <input id="scale" type="range" min="0.6" max="5" step="0.05" />
-          </label>
-          <label class="field">
-            <span>Искажение (liquid) <output id="warpOut"></output></span>
-            <input id="warp" type="range" min="0" max="2.5" step="0.05" />
-          </label>
-          <label class="field">
-            <span>Баланс цветов <output id="softnessOut"></output></span>
-            <input id="softness" type="range" min="0" max="1" step="0.01" />
-            <small class="range-legend"><span>больше первых</span><span>больше последних</span></small>
-          </label>
-          <label class="field">
-            <span>Скорость движения <output id="speedOut"></output></span>
-            <input id="speed" type="range" min="0" max="1" step="0.01" />
-          </label>
-          <p class="hint">Двойной клик по ползунку возвращает значение по умолчанию.</p>
+          <div class="sliders">
+            <label class="slider">
+              <span class="slider-labels">Масштаб узора <output id="scaleOut"></output></span>
+              <input id="scale" type="range" min="0.6" max="5" step="0.05" />
+            </label>
+            <label class="slider">
+              <span class="slider-labels">Искажение (Liquid) <output id="warpOut"></output></span>
+              <input id="warp" type="range" min="0" max="2.5" step="0.05" />
+            </label>
+            <label class="slider">
+              <span class="slider-labels">Баланс цветов <output id="softnessOut"></output></span>
+              <input id="softness" type="range" min="0" max="1" step="0.01" />
+              <small class="range-legend"><span>Больше первых</span><span>Больше последних</span></small>
+            </label>
+            <label class="slider">
+              <span class="slider-labels">Скорость движения <output id="speedOut"></output></span>
+              <input id="speed" type="range" min="0" max="1" step="0.01" />
+            </label>
+          </div>
         </div>
+      </div>
 
-        <div class="control-group">
-          <div class="group-header">
-            <h2>Шум (зерно)</h2>
+      <div class="card grain-card">
+        <div class="grain-main">
+          <div class="card-header">
+            <h2>Зерно</h2>
             <label class="switch" title="Включить слой шума">
               <input id="grainEnabled" type="checkbox" />
               <span class="switch-track" aria-hidden="true"></span>
               <span class="visually-hidden">Включить слой шума</span>
             </label>
           </div>
-          <div id="grainControls" hidden>
-            <label class="field">
-              <span>Размер <output id="grainSizeOut"></output></span>
+          <div id="grainSliders" class="sliders" hidden>
+            <label class="slider">
+              <span class="slider-labels">Размер <output id="grainSizeOut"></output></span>
               <input id="grainSize" type="range" min="1" max="8" step="1" />
             </label>
-            <label class="field">
-              <span>Плотность <output id="grainDensityOut"></output></span>
+            <label class="slider">
+              <span class="slider-labels">Плотность <output id="grainDensityOut"></output></span>
               <input id="grainDensity" type="range" min="0.02" max="1" step="0.01" />
             </label>
-            <label class="field">
-              <span>Непрозрачность <output id="grainOpacityOut"></output></span>
+            <label class="slider">
+              <span class="slider-labels">Непрозрачность <output id="grainOpacityOut"></output></span>
               <input id="grainOpacity" type="range" min="0.02" max="1" step="0.01" />
             </label>
-            <label class="field">
-              <span>Разброс яркости <output id="grainVarianceOut"></output></span>
+            <label class="slider">
+              <span class="slider-labels">Разброс яркости <output id="grainVarianceOut"></output></span>
               <input id="grainVariance" type="range" min="0" max="1" step="0.01" />
             </label>
-            <label class="field" id="grainSoftnessField">
-              <span>Мягкость края <output id="grainSoftnessOut"></output></span>
+            <label class="slider" id="grainSoftnessField">
+              <span class="slider-labels">Мягкость края <output id="grainSoftnessOut"></output></span>
               <input id="grainSoftness" type="range" min="0" max="1" step="0.01" />
             </label>
-            <label class="field">
-              <span>Режим наложения</span>
+          </div>
+        </div>
+
+        <div id="grainSide" class="grain-side" hidden>
+          <label class="field">
+            <span class="field-label">Режим наложения</span>
+            <span class="select-wrap">
               <select id="grainBlend">
                 <option value="normal">Обычный</option>
                 <option value="overlay">Перекрытие</option>
                 <option value="softlight">Мягкий свет</option>
               </select>
-            </label>
-            <div class="field">
-              <span>Цвет</span>
-              <div class="color-row color-row-single">
-                <input id="grainColor" type="color" class="color-input" aria-label="Выбрать цвет шума" />
-                <input
-                  id="grainColorHex"
-                  type="text"
-                  class="color-hex"
-                  maxlength="7"
-                  spellcheck="false"
-                  autocomplete="off"
-                  placeholder="#RRGGBB"
-                  aria-label="HEX-код цвета шума"
-                />
-              </div>
+            </span>
+          </label>
+          <div class="field">
+            <span class="field-label">Цвет зерна</span>
+            <div class="color-row">
+              <input id="grainColor" type="color" class="color-input" aria-label="Выбрать цвет зерна" />
+              <input
+                id="grainColorHex"
+                type="text"
+                class="color-hex"
+                maxlength="7"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="#RRGGBB"
+                aria-label="HEX-код цвета зерна"
+              />
+              <button id="grainColorReset" type="button" class="icon-btn icon-btn-muted" title="Сбросить цвет" aria-label="Сбросить цвет зерна">✕</button>
             </div>
-            <p class="hint">Зерно меняется каждый кадр, цикл остаётся бесшовным. Размер — в пикселях итогового файла. Анимированный шум сжимается хуже всего: при низком битрейте он превращается в «кашу» — поднимите битрейт видео.</p>
+          </div>
+          <p class="hint">Зерно меняется каждый кадр, цикл остаётся бесшовным. Размер — в пикселях итогового файла. Анимированный шум сжимается хуже всего: при низком битрейте поднимите битрейт видео.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas-wrap" aria-label="Превью">
+      <div class="canvas-box">
+        <canvas id="previewCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="card output" aria-label="Экспорт">
+      <div class="output-settings">
+        <div class="field">
+          <span class="field-label" id="sizeLabel">Ширина × высота</span>
+          <div class="size-inputs" role="group" aria-labelledby="sizeLabel">
+            <input id="customWidth" class="input" type="number" min="64" max="3840" step="2" aria-label="Ширина" />
+            <span aria-hidden="true">×</span>
+            <input id="customHeight" class="input" type="number" min="64" max="3840" step="2" aria-label="Высота" />
           </div>
         </div>
-      </section>
 
-      <section class="stage" aria-label="Превью и экспорт">
-        <div class="canvas-wrap">
-          <canvas id="previewCanvas"></canvas>
-        </div>
-
-        <div class="panel output">
-          <div class="output-settings">
-            <label class="field">
-              <span>Формат</span>
-              <select id="format">
-                <option value="webm+mp4">WebM + MP4</option>
-                <option value="webm">WebM (VP9)</option>
-                <option value="mp4">MP4 (H.264)</option>
-                <option value="gif">GIF</option>
+        <div class="field-pair">
+          <label class="field">
+            <span class="field-label">Длина цикла, с (1–10)</span>
+            <span class="select-wrap">
+              <select id="duration">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
               </select>
-            </label>
-            <label class="field">
-              <span>Размер</span>
-              <select id="resolutionPreset">
-                <option value="1920x1080">1920×1080 · hero</option>
-                <option value="1600x900">1600×900 · hero</option>
-                <option value="1920x640">1920×640 · баннер</option>
-                <option value="1200x630">1200×630 · OG</option>
-                <option value="1080x1080">1080×1080 · квадрат</option>
-                <option value="custom">Свой размер…</option>
-              </select>
-            </label>
-            <div class="field custom-size" id="customSizeRow" hidden>
-              <span>Ширина × высота</span>
-              <div class="size-inputs">
-                <input id="customWidth" type="number" min="64" max="3840" step="1" aria-label="Ширина" />
-                <span aria-hidden="true">×</span>
-                <input id="customHeight" type="number" min="64" max="3840" step="1" aria-label="Высота" />
-              </div>
-            </div>
-            <label class="field">
-              <span>Длительность loop <output id="durationOut"></output></span>
-              <input id="duration" type="range" min="2" max="10" step="0.5" />
-            </label>
-            <label class="field">
-              <span>FPS</span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="field-label">FPS</span>
+            <span class="select-wrap">
               <select id="fps">
                 <option value="24">24</option>
                 <option value="30" selected>30</option>
                 <option value="60">60</option>
               </select>
-            </label>
-            <label class="field" id="bitrateField">
-              <span>Битрейт видео <output id="bitrateOut"></output></span>
-              <input id="bitrate" type="range" min="0.5" max="10" step="0.5" />
-            </label>
-            <label class="field" id="gifWidthField">
-              <span>Ширина GIF <output id="gifWidthOut"></output></span>
-              <input id="gifWidth" type="range" min="240" max="960" step="20" />
-            </label>
-            <div class="field" id="alphaField">
-              <span>Альфа-канал</span>
-              <label class="checkbox-field">
-                <input id="removeAlpha" type="checkbox" checked />
-                <span>Убрать из WebM</span>
-              </label>
-            </div>
-          </div>
-
-          <button id="exportBtn" class="btn btn-primary btn-block" type="button">
-            <span id="exportLabel">Экспорт</span>
-            <small id="exportMeta" class="btn-meta"></small>
-          </button>
-
-          <div id="exportProgress" class="progress" hidden>
-            <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
-            <span id="progressLabel"></span>
-          </div>
-          <p id="statusLine" class="status" role="status" hidden></p>
-          <p id="formatHint" class="hint"></p>
+            </span>
+          </label>
         </div>
 
-        <div id="results" class="results" aria-label="Готовые файлы"></div>
-      </section>
-    </main>
-  </div>
+        <label class="slider slider-compact" id="bitrateField">
+          <span class="slider-labels">Битрейт видео <output id="bitrateOut"></output></span>
+          <input id="bitrate" type="range" min="0.5" max="10" step="0.5" />
+        </label>
+        <label class="slider slider-compact" id="gifWidthField">
+          <span class="slider-labels">Ширина GIF <output id="gifWidthOut"></output></span>
+          <input id="gifWidth" type="range" min="240" max="960" step="20" />
+        </label>
+
+        <label class="field field-format">
+          <span class="field-label">Формат</span>
+          <span class="select-wrap">
+            <select id="format">
+              <option value="webm+mp4">WebM + MP4</option>
+              <option value="webm">WebM (VP9)</option>
+              <option value="mp4">MP4 (H.264)</option>
+              <option value="gif">GIF</option>
+            </select>
+          </span>
+        </label>
+
+        <div class="field" id="alphaField">
+          <span class="field-label">Альфа-канал</span>
+          <label class="checkbox-field">
+            <input id="removeAlpha" type="checkbox" checked />
+            <span>Убрать из WebM</span>
+          </label>
+        </div>
+      </div>
+
+      <button id="exportBtn" class="export-btn" type="button">
+        <span id="exportLabel">Экспорт</span>
+        <small id="exportMeta" class="export-meta"></small>
+      </button>
+
+      <div id="exportProgress" class="progress" hidden>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+        <span id="progressLabel"></span>
+      </div>
+      <p id="statusLine" class="status" role="status" hidden></p>
+      <p id="formatHint" class="hint"></p>
+    </section>
+
+    <section id="gallery" class="gallery" aria-label="Готовые файлы" hidden>
+      <h2>Отрендеренные варианты</h2>
+      <div class="gallery-scroll">
+        <div id="results" class="results"></div>
+      </div>
+    </section>
+  </main>
 
   <template id="colorRowTemplate">
     <div class="color-row">
       <span class="drag-handle" draggable="true" title="Перетащить, чтобы изменить порядок">⠿</span>
+      <span class="color-index"></span>
       <input type="color" class="color-input" aria-label="Выбрать цвет" />
       <input
         type="text"
@@ -216,7 +235,7 @@
         placeholder="#RRGGBB"
         aria-label="HEX-код цвета"
       />
-      <button type="button" class="btn-icon remove-color" title="Удалить цвет" aria-label="Удалить цвет">✕</button>
+      <button type="button" class="icon-btn icon-btn-muted remove-color" title="Удалить цвет" aria-label="Удалить цвет">✕</button>
     </div>
   </template>
 
@@ -227,7 +246,7 @@
         <span class="result-name"></span>
         <span class="result-size"></span>
       </div>
-      <a class="btn btn-block result-download" download>Скачать</a>
+      <a class="result-download" download>Скачать</a>
     </div>
   </template>
 

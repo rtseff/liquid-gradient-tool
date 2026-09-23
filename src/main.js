@@ -89,9 +89,11 @@ function gifSize() {
 
 const el = {
   presetList: document.getElementById('presetList'),
+  presetToggle: document.getElementById('presetToggle'),
   colorList: document.getElementById('colorList'),
   colorCount: document.getElementById('colorCount'),
   addColorBtn: document.getElementById('addColorBtn'),
+  addColorLabel: document.getElementById('addColorLabel'),
   undoColorBtn: document.getElementById('undoColorBtn'),
   redoColorBtn: document.getElementById('redoColorBtn'),
   newPatternBtn: document.getElementById('newPatternBtn'),
@@ -103,15 +105,13 @@ const el = {
   softnessOut: document.getElementById('softnessOut'),
   speed: document.getElementById('speed'),
   speedOut: document.getElementById('speedOut'),
-  resolutionPreset: document.getElementById('resolutionPreset'),
-  customSizeRow: document.getElementById('customSizeRow'),
   customWidth: document.getElementById('customWidth'),
   customHeight: document.getElementById('customHeight'),
   duration: document.getElementById('duration'),
-  durationOut: document.getElementById('durationOut'),
   fps: document.getElementById('fps'),
   grainEnabled: document.getElementById('grainEnabled'),
-  grainControls: document.getElementById('grainControls'),
+  grainSliders: document.getElementById('grainSliders'),
+  grainSide: document.getElementById('grainSide'),
   grainSize: document.getElementById('grainSize'),
   grainSizeOut: document.getElementById('grainSizeOut'),
   grainDensity: document.getElementById('grainDensity'),
@@ -126,6 +126,7 @@ const el = {
   grainBlend: document.getElementById('grainBlend'),
   grainColor: document.getElementById('grainColor'),
   grainColorHex: document.getElementById('grainColorHex'),
+  grainColorReset: document.getElementById('grainColorReset'),
   format: document.getElementById('format'),
   bitrateField: document.getElementById('bitrateField'),
   bitrate: document.getElementById('bitrate'),
@@ -143,6 +144,8 @@ const el = {
   progressFill: document.getElementById('progressFill'),
   progressLabel: document.getElementById('progressLabel'),
   statusLine: document.getElementById('statusLine'),
+  gallery: document.getElementById('gallery'),
+  galleryScroll: document.querySelector('.gallery-scroll'),
   results: document.getElementById('results'),
 };
 
@@ -168,6 +171,12 @@ const presetButtons = PRESETS.map((preset) => {
   });
   el.presetList.appendChild(btn);
   return { btn, colors: preset.colors };
+});
+
+el.presetToggle.addEventListener('click', () => {
+  const open = el.presetList.hidden;
+  el.presetList.hidden = !open;
+  el.presetToggle.setAttribute('aria-expanded', String(open));
 });
 
 function updatePresetActive() {
@@ -201,10 +210,13 @@ function pushColorHistory() {
   updatePresetActive();
 }
 
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+
 function renderColorList() {
   el.colorList.innerHTML = '';
   state.colors.forEach((color, index) => {
     const node = colorRowTemplate.content.firstElementChild.cloneNode(true);
+    node.querySelector('.color-index').textContent = ROMAN[index] ?? String(index + 1);
     const input = node.querySelector('.color-input');
     const hexInput = node.querySelector('.color-hex');
     input.value = color;
@@ -288,7 +300,7 @@ function renderColorList() {
 
   const full = state.colors.length >= MAX_COLORS;
   el.addColorBtn.disabled = full;
-  el.addColorBtn.textContent = full ? `Максимум ${MAX_COLORS} цветов` : '+ Добавить цвет';
+  el.addColorLabel.textContent = full ? `Максимум ${MAX_COLORS} цветов` : '+ Добавить цвет';
   el.colorCount.textContent = `${state.colors.length}/${MAX_COLORS}`;
   updatePresetActive();
 }
@@ -341,9 +353,13 @@ updateHistoryButtons();
 
 function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
   const defaultValue = state[key];
+  const min = parseFloat(input.min);
+  const max = parseFloat(input.max);
   const apply = (value) => {
     state[key] = value;
     input.value = value;
+    // Accent part of the track, up to the thumb (see style.css).
+    input.style.setProperty('--fill', `${((value - min) / (max - min)) * 100}%`);
     output.textContent = format(value);
     onChange?.();
   };
@@ -357,7 +373,6 @@ bindRange(el.scale, el.scaleOut, 'scale');
 bindRange(el.warp, el.warpOut, 'warp');
 bindRange(el.softness, el.softnessOut, 'softness');
 bindRange(el.speed, el.speedOut, 'speed', (v) => `${Math.round(v * 100)}%`);
-bindRange(el.duration, el.durationOut, 'duration', (v) => `${v.toFixed(1)} с`, updateOutputMeta);
 bindRange(el.gifWidth, el.gifWidthOut, 'gifWidth', (v) => `${v} px`, updateOutputMeta);
 bindRange(el.bitrate, el.bitrateOut, 'bitrate', (v) => `${v.toFixed(1)} Мбит/с`, updateOutputMeta);
 
@@ -389,11 +404,16 @@ el.grainBlend.addEventListener('change', () => {
   state.grainBlend = el.grainBlend.value;
 });
 
+function updateGrainVisibility() {
+  el.grainSliders.hidden = !state.grainEnabled;
+  el.grainSide.hidden = !state.grainEnabled;
+}
+
 el.grainEnabled.checked = state.grainEnabled;
-el.grainControls.hidden = !state.grainEnabled;
+updateGrainVisibility();
 el.grainEnabled.addEventListener('change', () => {
   state.grainEnabled = el.grainEnabled.checked;
-  el.grainControls.hidden = !state.grainEnabled;
+  updateGrainVisibility();
 });
 
 // Same swatch <-> hex behavior as the palette rows: apply a hex as soon as
@@ -415,6 +435,13 @@ el.grainColorHex.addEventListener('change', () => {
 });
 el.grainColorHex.addEventListener('focus', () => el.grainColorHex.select());
 
+const defaultGrainColor = state.grainColor;
+el.grainColorReset.addEventListener('click', () => {
+  state.grainColor = defaultGrainColor;
+  el.grainColor.value = defaultGrainColor;
+  el.grainColorHex.value = defaultGrainColor;
+});
+
 // --- Output settings --------------------------------------------------------
 
 function videoContainers() {
@@ -429,16 +456,17 @@ function updateOutputMeta() {
   el.alphaField.hidden = !containers.includes('webm');
 
   el.exportLabel.textContent = `Экспорт ${FORMAT_LABELS[state.format]}`;
+  const seconds = `${state.duration.toFixed(1)} с`;
   if (isGif) {
     const gif = gifSize();
-    el.exportMeta.textContent = `${gif.width}×${gif.height} · ${state.duration} с · ${Math.min(state.fps, 30)} fps`;
+    el.exportMeta.textContent = `${gif.width}×${gif.height} - ${seconds} - ${Math.min(state.fps, 30)} fps`;
   } else {
     // Target bitrate × duration; real VP9/H.264 output of a slow gradient
     // usually lands at or below this.
     const approxBytes = (state.bitrate * 1e6 * state.duration) / 8;
     const perFile = containers.length > 1 ? ' на файл' : '';
     el.exportMeta.textContent =
-      `${state.width}×${state.height} · ${state.duration} с · ${state.fps} fps · ≈ ${formatBytes(approxBytes)}${perFile}`;
+      `${state.width}×${state.height} - ${seconds} - ${state.fps} fps - ~${formatBytes(approxBytes)}${perFile}`;
   }
 
   let hint = FORMAT_HINTS[state.format];
@@ -466,21 +494,6 @@ function applyResolution(w, h) {
   updateOutputMeta();
 }
 
-el.resolutionPreset.value = `${state.width}x${state.height}`;
-
-el.resolutionPreset.addEventListener('change', () => {
-  const val = el.resolutionPreset.value;
-  if (val === 'custom') {
-    el.customSizeRow.hidden = false;
-    el.customWidth.value = state.width;
-    el.customHeight.value = state.height;
-    return;
-  }
-  el.customSizeRow.hidden = true;
-  const [w, h] = val.split('x').map(Number);
-  applyResolution(w, h);
-});
-
 // Rounded to even: H.264 (4:2:0) encoders reject odd frame dimensions.
 function clampSize(value, fallback) {
   const n = parseInt(value, 10);
@@ -488,18 +501,21 @@ function clampSize(value, fallback) {
   return Math.min(3840, Math.max(64, Math.round(n / 2) * 2));
 }
 
-// Picking a preset blurs a just-edited size field, and the browser fires
-// that field's pending 'change' *after* the preset applied — so only
-// honor these fields while "custom" is actually selected.
+el.customWidth.value = state.width;
+el.customHeight.value = state.height;
 el.customWidth.addEventListener('change', () => {
-  if (el.resolutionPreset.value !== 'custom') return;
   applyResolution(clampSize(el.customWidth.value, state.width), state.height);
   el.customWidth.value = state.width;
 });
 el.customHeight.addEventListener('change', () => {
-  if (el.resolutionPreset.value !== 'custom') return;
   applyResolution(state.width, clampSize(el.customHeight.value, state.height));
   el.customHeight.value = state.height;
+});
+
+el.duration.value = String(state.duration);
+el.duration.addEventListener('change', () => {
+  state.duration = parseInt(el.duration.value, 10);
+  updateOutputMeta();
 });
 
 el.fps.value = String(state.fps);
@@ -609,7 +625,18 @@ function addResult({ name, blob, isVideo, width, height }) {
   link.href = url;
   link.download = name;
   el.results.prepend(node);
+  el.gallery.hidden = false;
+  el.results.scrollLeft = 0;
+  updateGalleryFade();
 }
+
+// Right-edge fade only while there are cards scrolled out of view.
+function updateGalleryFade() {
+  const { scrollLeft, scrollWidth, clientWidth } = el.results;
+  el.galleryScroll.classList.toggle('has-more', scrollLeft + clientWidth < scrollWidth - 1);
+}
+el.results.addEventListener('scroll', updateGalleryFade, { passive: true });
+window.addEventListener('resize', updateGalleryFade);
 
 const renderFrame = (phase) => renderer.render(currentParams(), phase);
 
