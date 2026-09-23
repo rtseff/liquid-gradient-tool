@@ -17,6 +17,11 @@ const state = {
   softness: 0.3,
   speed: 0.5, // raw slider value 0..1, eased into an amplitude via speedToAmplitude()
   seed: [randomSeedValue(), randomSeedValue()],
+  grainEnabled: false,
+  grainSize: 2, // px in the exported file
+  grainDensity: 0.35,
+  grainOpacity: 0.25,
+  grainColor: '#ffffff',
   width: 1600,
   height: 900,
   duration: 4,
@@ -102,6 +107,16 @@ const el = {
   duration: document.getElementById('duration'),
   durationOut: document.getElementById('durationOut'),
   fps: document.getElementById('fps'),
+  grainEnabled: document.getElementById('grainEnabled'),
+  grainControls: document.getElementById('grainControls'),
+  grainSize: document.getElementById('grainSize'),
+  grainSizeOut: document.getElementById('grainSizeOut'),
+  grainDensity: document.getElementById('grainDensity'),
+  grainDensityOut: document.getElementById('grainDensityOut'),
+  grainOpacity: document.getElementById('grainOpacity'),
+  grainOpacityOut: document.getElementById('grainOpacityOut'),
+  grainColor: document.getElementById('grainColor'),
+  grainColorHex: document.getElementById('grainColorHex'),
   format: document.getElementById('format'),
   bitrateField: document.getElementById('bitrateField'),
   bitrate: document.getElementById('bitrate'),
@@ -341,6 +356,39 @@ el.newPatternBtn.addEventListener('click', () => {
   state.seed = [randomSeedValue(), randomSeedValue()];
 });
 
+// --- Grain layer ----------------------------------------------------------
+
+const percent = (v) => `${Math.round(v * 100)}%`;
+bindRange(el.grainSize, el.grainSizeOut, 'grainSize', (v) => `${v} px`);
+bindRange(el.grainDensity, el.grainDensityOut, 'grainDensity', percent);
+bindRange(el.grainOpacity, el.grainOpacityOut, 'grainOpacity', percent);
+
+el.grainEnabled.checked = state.grainEnabled;
+el.grainControls.hidden = !state.grainEnabled;
+el.grainEnabled.addEventListener('change', () => {
+  state.grainEnabled = el.grainEnabled.checked;
+  el.grainControls.hidden = !state.grainEnabled;
+});
+
+// Same swatch <-> hex behavior as the palette rows: apply a hex as soon as
+// it's complete, revert an invalid value on blur/Enter.
+el.grainColor.value = state.grainColor;
+el.grainColorHex.value = state.grainColor;
+el.grainColor.addEventListener('input', () => {
+  state.grainColor = el.grainColor.value;
+  el.grainColorHex.value = el.grainColor.value;
+});
+el.grainColorHex.addEventListener('input', () => {
+  const normalized = normalizeHex(el.grainColorHex.value);
+  if (!normalized) return;
+  state.grainColor = normalized;
+  el.grainColor.value = normalized;
+});
+el.grainColorHex.addEventListener('change', () => {
+  el.grainColorHex.value = normalizeHex(el.grainColorHex.value) ?? state.grainColor;
+});
+el.grainColorHex.addEventListener('focus', () => el.grainColorHex.select());
+
 // --- Output settings --------------------------------------------------------
 
 function videoContainers() {
@@ -447,6 +495,13 @@ function currentParams() {
     loops: 1,
     speed: speedToAmplitude(state.speed),
     seed: state.seed,
+    grain: {
+      enabled: state.grainEnabled,
+      size: state.grainSize,
+      density: state.grainDensity,
+      opacity: state.grainOpacity,
+      color: state.grainColor,
+    },
   };
 }
 

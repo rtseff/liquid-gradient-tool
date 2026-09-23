@@ -165,6 +165,21 @@ If you add any new time-varying effect to the shader, it must be driven
 through this same phase→circle mapping, never through `phase` directly,
 or the exported loop will visibly jump at the seam.
 
+### Grain layer
+
+"Шум (зерно)" (`state.grain*`, passed as `params.grain`) is drawn at the
+end of the fragment shader on a grid of `u_grainSize`-pixel cells in
+**output pixels** (`gl_FragCoord`), so it scales with the export size
+(GIF, rendered smaller, gets relatively bigger grain). Size 1 = one
+pixel per cell; ≥ 2 = round dots jittered anywhere in their cell, which
+needs a 3×3 neighbour search so dots aren't clipped — the first version
+kept dots near cell centres and read as a visible grid. Randomness uses
+Dave Hoskins' "Hash without Sine" (`hash12` / `hash22`) — at size 1 the
+share of changed pixels matched the density slider (0.099 / 0.351 /
+0.801 for 10 / 35 / 80%). The grain is static (no `u_phase`), so it
+can't break the seamless-loop invariant; an animated variant would have
+to derive its per-frame seed from a phase that wraps at 1.0.
+
 ### Removed on purpose
 
 The output is always a full-frame rectangle. Masks (a circle mask, and
