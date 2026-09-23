@@ -68,6 +68,10 @@ export class LiquidGradientRenderer {
       grainDensity: gl.getUniformLocation(program, 'u_grainDensity'),
       grainColor: gl.getUniformLocation(program, 'u_grainColor'),
       grainOpacity: gl.getUniformLocation(program, 'u_grainOpacity'),
+      grainFrames: gl.getUniformLocation(program, 'u_grainFrames'),
+      grainBlend: gl.getUniformLocation(program, 'u_grainBlend'),
+      grainVariance: gl.getUniformLocation(program, 'u_grainVariance'),
+      grainSoftness: gl.getUniformLocation(program, 'u_grainSoftness'),
     };
   }
 
@@ -126,6 +130,10 @@ export class LiquidGradientRenderer {
       gl.uniform1f(this.uniforms.grainDensity, grain.density);
       gl.uniform3f(this.uniforms.grainColor, ...hexToRgb01(grain.color));
       gl.uniform1f(this.uniforms.grainOpacity, grain.opacity);
+      gl.uniform1f(this.uniforms.grainFrames, grain.frames);
+      gl.uniform1f(this.uniforms.grainBlend, { normal: 0, overlay: 1, softlight: 2 }[grain.blend] ?? 0);
+      gl.uniform1f(this.uniforms.grainVariance, grain.variance);
+      gl.uniform1f(this.uniforms.grainSoftness, grain.softness);
     }
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);

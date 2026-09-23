@@ -18,9 +18,12 @@ const state = {
   speed: 0.5, // raw slider value 0..1, eased into an amplitude via speedToAmplitude()
   seed: [randomSeedValue(), randomSeedValue()],
   grainEnabled: false,
-  grainSize: 2, // px in the exported file
-  grainDensity: 0.35,
-  grainOpacity: 0.25,
+  grainSize: 1, // px in the exported file
+  grainDensity: 0.5,
+  grainOpacity: 0.3,
+  grainVariance: 1,
+  grainSoftness: 0.3,
+  grainBlend: 'overlay', // 'normal' | 'overlay' | 'softlight'
   grainColor: '#ffffff',
   width: 1600,
   height: 900,
@@ -115,6 +118,12 @@ const el = {
   grainDensityOut: document.getElementById('grainDensityOut'),
   grainOpacity: document.getElementById('grainOpacity'),
   grainOpacityOut: document.getElementById('grainOpacityOut'),
+  grainVariance: document.getElementById('grainVariance'),
+  grainVarianceOut: document.getElementById('grainVarianceOut'),
+  grainSoftnessField: document.getElementById('grainSoftnessField'),
+  grainSoftness: document.getElementById('grainSoftness'),
+  grainSoftnessOut: document.getElementById('grainSoftnessOut'),
+  grainBlend: document.getElementById('grainBlend'),
   grainColor: document.getElementById('grainColor'),
   grainColorHex: document.getElementById('grainColorHex'),
   format: document.getElementById('format'),
@@ -359,9 +368,26 @@ el.newPatternBtn.addEventListener('click', () => {
 // --- Grain layer ----------------------------------------------------------
 
 const percent = (v) => `${Math.round(v * 100)}%`;
-bindRange(el.grainSize, el.grainSizeOut, 'grainSize', (v) => `${v} px`);
+
+// Edge softness only exists for round dots (size ≥ 2); at 1 px every dot
+// is a single pixel, so the slider would do nothing.
+function updateGrainSoftnessAvailability() {
+  const available = state.grainSize >= 2;
+  el.grainSoftness.disabled = !available;
+  el.grainSoftnessField.classList.toggle('is-disabled', !available);
+  el.grainSoftnessField.title = available ? '' : 'Работает для размера от 2 px';
+}
+
+bindRange(el.grainSize, el.grainSizeOut, 'grainSize', (v) => `${v} px`, updateGrainSoftnessAvailability);
 bindRange(el.grainDensity, el.grainDensityOut, 'grainDensity', percent);
 bindRange(el.grainOpacity, el.grainOpacityOut, 'grainOpacity', percent);
+bindRange(el.grainVariance, el.grainVarianceOut, 'grainVariance', percent);
+bindRange(el.grainSoftness, el.grainSoftnessOut, 'grainSoftness', percent);
+
+el.grainBlend.value = state.grainBlend;
+el.grainBlend.addEventListener('change', () => {
+  state.grainBlend = el.grainBlend.value;
+});
 
 el.grainEnabled.checked = state.grainEnabled;
 el.grainControls.hidden = !state.grainEnabled;
@@ -486,7 +512,13 @@ updateOutputMeta();
 
 // --- Live preview loop -------------------------------------------------
 
-function currentParams() {
+// Frames in one loop, computed exactly like the exporters do, so the
+// grain re-rolls once per exported frame. GIF passes its own (≤ 30) fps.
+function loopFrames(fps) {
+  return Math.max(1, Math.round(fps * state.duration));
+}
+
+function currentParams(fps = state.fps) {
   return {
     colors: state.colors,
     scale: state.scale,
@@ -500,7 +532,11 @@ function currentParams() {
       size: state.grainSize,
       density: state.grainDensity,
       opacity: state.grainOpacity,
+      variance: state.grainVariance,
+      softness: state.grainSoftness,
+      blend: state.grainBlend,
       color: state.grainColor,
+      frames: loopFrames(fps),
     },
   };
 }
@@ -594,13 +630,14 @@ async function exportOneVideo(container, stepLabel) {
 
 async function exportGifFile() {
   const { width, height } = gifSize();
+  const fps = Math.min(state.fps, 30);
   renderer.setSize(width, height);
   const blob = await exportGif({
     canvas,
-    renderFrame,
+    renderFrame: (phase) => renderer.render(currentParams(fps), phase),
     width,
     height,
-    fps: Math.min(state.fps, 30),
+    fps,
     duration: state.duration,
     onProgress: (p, stage) => {
       const label = stage === 'render' ? 'Рендер кадров…' : 'Кодирование GIF…';

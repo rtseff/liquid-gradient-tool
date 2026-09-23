@@ -172,13 +172,26 @@ end of the fragment shader on a grid of `u_grainSize`-pixel cells in
 **output pixels** (`gl_FragCoord`), so it scales with the export size
 (GIF, rendered smaller, gets relatively bigger grain). Size 1 = one
 pixel per cell; ≥ 2 = round dots jittered anywhere in their cell, which
-needs a 3×3 neighbour search so dots aren't clipped — the first version
-kept dots near cell centres and read as a visible grid. Randomness uses
-Dave Hoskins' "Hash without Sine" (`hash12` / `hash22`) — at size 1 the
-share of changed pixels matched the density slider (0.099 / 0.351 /
-0.801 for 10 / 35 / 80%). The grain is static (no `u_phase`), so it
-can't break the seamless-loop invariant; an animated variant would have
-to derive its per-frame seed from a phase that wraps at 1.0.
+needs a 3×3 neighbour search so dots aren't clipped (dots kept near
+cell centres read as a visible grid).
+
+- **Animated, and still seamless.** The grain re-rolls every frame:
+  `frame = mod(floor(u_phase * u_grainFrames + 0.5), u_grainFrames)` is
+  the hash's z. `u_grainFrames` must equal the exporter's frame count
+  (`round(fps × duration)`), which `currentParams(fps)` computes via
+  `loopFrames()` — GIF passes its own capped fps, so don't render GIF
+  frames with the default `currentParams()`. The `mod` makes phase 1.0
+  frame 0 again (verified: phase 0 vs 1 bit-identical for all blend
+  modes); the `+ 0.5` stops `i / n * n` rounding down to `i − 1`.
+- Randomness: Dave Hoskins' "Hash without Sine" (`hash13` / `hash23`,
+  xy = cell, z = frame). Checked at size 1: changed-pixel share matched
+  density (0.101 / 0.499 / 0.9 for 10 / 50 / 90%); variance 100% gives
+  a uniform brightness spread (mean 126.9, σ 73.5 vs 127.5 / 73.6).
+- Blend modes `blendOverlay()` / `blendSoftLight()` follow W3C
+  Compositing and Blending Level 1; they matched a JS reference of
+  those formulas exactly on 18 flat-backdrop combinations.
+- GLSL lives in JS template literals — a backtick in a shader comment
+  ends the string and breaks the module (it happened once).
 
 ### Removed on purpose
 

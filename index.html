@@ -84,6 +84,22 @@
               <span>Непрозрачность <output id="grainOpacityOut"></output></span>
               <input id="grainOpacity" type="range" min="0.02" max="1" step="0.01" />
             </label>
+            <label class="field">
+              <span>Разброс яркости <output id="grainVarianceOut"></output></span>
+              <input id="grainVariance" type="range" min="0" max="1" step="0.01" />
+            </label>
+            <label class="field" id="grainSoftnessField">
+              <span>Мягкость края <output id="grainSoftnessOut"></output></span>
+              <input id="grainSoftness" type="range" min="0" max="1" step="0.01" />
+            </label>
+            <label class="field">
+              <span>Режим наложения</span>
+              <select id="grainBlend">
+                <option value="normal">Обычный</option>
+                <option value="overlay">Перекрытие</option>
+                <option value="softlight">Мягкий свет</option>
+              </select>
+            </label>
             <div class="field">
               <span>Цвет</span>
               <div class="color-row color-row-single">
@@ -100,7 +116,7 @@
                 />
               </div>
             </div>
-            <p class="hint">Размер — в пикселях итогового файла. Зерно добавляет много мелких деталей: для чистого результата поднимите битрейт видео до 3–5 Мбит/с.</p>
+            <p class="hint">Зерно меняется каждый кадр, цикл остаётся бесшовным. Размер — в пикселях итогового файла. Анимированный шум сжимается хуже всего: при низком битрейте он превращается в «кашу» — поднимите битрейт видео.</p>
           </div>
         </div>
       </section>

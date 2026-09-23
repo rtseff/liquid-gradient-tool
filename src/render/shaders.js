@@ -135,6 +135,10 @@ uniform float u_grainSize;     // grain dot size in output pixels
 uniform float u_grainDensity;  // 0..1, share of grid cells that get a dot
 uniform vec3 u_grainColor;
 uniform float u_grainOpacity;  // 0..1
+uniform float u_grainFrames;   // frames in one loop of the export being rendered
+uniform float u_grainBlend;    // 0 = normal, 1 = overlay, 2 = soft light
+uniform float u_grainVariance; // 0..1, random per-dot brightness spread
+uniform float u_grainSoftness; // 0..1, dot edge from crisp to fully soft
 
 out vec4 fragColor;
 
@@ -142,16 +146,30 @@ ${SIMPLEX_4D}
 
 // "Hash without Sine" by Dave Hoskins (MIT, https://www.shadertoy.com/view/4djSRW).
 // Unlike fract(sin(dot(...))) it stays uniform at large pixel coordinates.
-float hash12(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
+// 3D input: xy = grain cell, z = grain frame index.
+float hash13(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
   return fract((p3.x + p3.y) * p3.z);
 }
 
-vec2 hash22(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+vec2 hash23(vec3 p3) {
+  p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// Separable blend modes as defined in W3C "Compositing and Blending
+// Level 1": cb = backdrop (gradient), cs = source (grain).
+vec3 blendOverlay(vec3 cb, vec3 cs) {
+  return mix(2.0 * cs * cb, cs + (2.0 * cb - 1.0) - cs * (2.0 * cb - 1.0), step(0.5, cb));
+}
+
+vec3 blendSoftLight(vec3 cb, vec3 cs) {
+  vec3 d = mix(sqrt(cb), ((16.0 * cb - 12.0) * cb + 4.0) * cb, step(cb, vec3(0.25)));
+  vec3 darken = cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb);
+  vec3 lighten = cb + (2.0 * cs - 1.0) * (d - cb);
+  return mix(darken, lighten, step(0.5, cs));
 }
 
 // Sampling noise along a circle in the w/z plane makes the animation
@@ -210,31 +228,44 @@ void main() {
   }
 
   // Grain layer: a grid of u_grainSize-pixel cells in output pixels; each
-  // cell holds a dot with probability u_grainDensity. Deliberately
-  // independent of u_phase (a static texture), so it can't affect the
-  // seamless-loop invariant and it stays cheap for the video encoder.
+  // cell holds a dot with probability u_grainDensity. The pattern is
+  // re-rolled every frame. The frame index is derived from u_phase and
+  // wraps with mod(), so phase 1.0 gives frame 0 again: the loop stays
+  // seamless. The + 0.5 guards against phase = i / n landing a hair under i.
   if (u_grainEnabled > 0.5) {
+    float frame = mod(floor(u_phase * u_grainFrames + 0.5), u_grainFrames);
     vec2 cell = floor(gl_FragCoord.xy / u_grainSize);
     float coverage = 0.0;
+    float brightness = 1.0;
     if (u_grainSize < 2.0) {
       // 1px grain: each pixel is its own dot.
-      coverage = step(hash12(cell), u_grainDensity);
+      vec3 k = vec3(cell, frame);
+      coverage = step(hash13(k), u_grainDensity);
+      brightness = hash13(k + 19.19);
     } else {
       // Round dots (diameter ≈ u_grainSize) placed anywhere inside their
       // cell, so the result reads as organic grain rather than a grid.
       // A dot can spill into neighbouring cells, hence the 3×3 search.
       float radius = u_grainSize * 0.5;
+      float inner = mix(radius - 0.5, 0.0, u_grainSoftness);
       for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
-          vec2 n = cell + vec2(float(x), float(y));
-          if (hash12(n) >= u_grainDensity) continue;
-          vec2 center = (n + hash22(n + 71.3)) * u_grainSize;
-          float d = distance(gl_FragCoord.xy, center);
-          coverage = max(coverage, 1.0 - smoothstep(radius - 0.5, radius + 0.5, d));
+          vec3 k = vec3(cell + vec2(float(x), float(y)), frame);
+          if (hash13(k) >= u_grainDensity) continue;
+          vec2 center = (k.xy + hash23(k + 71.3)) * u_grainSize;
+          float c = 1.0 - smoothstep(inner, radius + 0.5, distance(gl_FragCoord.xy, center));
+          if (c > coverage) {
+            coverage = c;
+            brightness = hash13(k + 19.19);
+          }
         }
       }
     }
-    color = mix(color, u_grainColor, coverage * u_grainOpacity);
+    vec3 grain = u_grainColor * mix(1.0, brightness, u_grainVariance);
+    vec3 blended = grain;
+    if (u_grainBlend > 1.5) blended = blendSoftLight(color, grain);
+    else if (u_grainBlend > 0.5) blended = blendOverlay(color, grain);
+    color = mix(color, blended, coverage * u_grainOpacity);
   }
 
   fragColor = vec4(color, 1.0);
