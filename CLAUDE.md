@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 "liquid"/mesh gradients and exporting a seamlessly looping video/GIF for
 use as a hero-section background. Plain ES modules, no framework, no
 build step, no `package.json` — `index.html` loads `src/main.js`
-directly via `<script type="module">`.
+directly via `<script type="module">`
+(through `src/boot.js`, see below).
 
 ## Running locally
 
@@ -57,6 +58,17 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
 
 ## Architecture
 
+- **`src/boot.js`** — the entry point. Touch-first devices
+  (`(hover: none) and (pointer: coarse)`: phones, tablets) get a
+  "desktop only" banner (`.desktop-only`, swapped in by the same media
+  query in `style.css`) and `main.js` is never imported, so no WebGL
+  context or render loop starts there. On desktop it sets
+  `document.documentElement.style.zoom` to
+  `max(1, min(innerWidth / 1920, innerHeight / 1080))` (the mock is
+  1920×1080; 2560×1440 → 1.33) and then imports `main.js`. Nothing in
+  the app reads pointer coordinates, so CSS `zoom` is safe; if you add
+  something that does, remember `getBoundingClientRect()` returns
+  zoomed values.
 - **`src/main.js`** — the entire UI/state layer. One mutable `state`
   object; `currentParams()` derives shader-ready params from it (e.g.
   `speedToAmplitude()` applies a cubic ease to the speed slider — see
@@ -132,9 +144,21 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   the grid row. Sliders are restyled native ranges: `bindRange()` writes
   the `--fill` percentage the WebKit track gradient uses. Icons are text
   glyphs (↶ ↷ ▾ ⠿ ✕ ↻) on purpose — the user asked to keep them rather
-  than the mock's icon set. The global `[hidden] { display: none
+  than the mock's icon set. The gallery strip hides its scrollbar, so
+  `main.js` maps a vertical mouse wheel to horizontal scroll (handing it
+  back to the page at either end) and toggles `.more-before` /
+  `.more-after` for the edge fades. The global `[hidden] { display: none
   !important }` rule exists because component rules like
   `.field { display: flex }` otherwise override the `hidden` attribute.
+- **Color contrast (WCAG 2.2 AA)** is a requirement, not a nicety. Text
+  must be ≥ 4.5:1 on `--panel` *and* `--field`, so nothing dimmer than
+  `--text-muted` (#85828c, 4.54:1 on field) may be used for text — the
+  mock's #4d4a54 was 2.2:1. Boundaries of interactive controls (inputs,
+  selects, color rows, buttons, the empty part of slider tracks, the
+  switch) use `--control-border` (≥ 3:1, 1.4.11); `--border` is only for
+  cards. Check with axe-core (`npm pack axe-core`, inject `axe.min.js`,
+  `axe.run` with the wcag2aa/wcag22aa tags) — it can't judge text over
+  the preset gradients or single-glyph icons, so compute those by hand.
 - **`src/presets.js`** — static palette data plus `presetGradientCss()`
   for the swatch UI. No other state.
 - **`vendor/`** — runtime dependencies checked into the repo instead of
