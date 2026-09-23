@@ -79,6 +79,21 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   affected DOM (e.g. `renderColorList()`, `updateOutputMeta()`). Errors/success are reported inline via
   `showStatus()`, not `alert()`. The global Ctrl+Z palette undo is
   skipped while a text/number input has focus (`isTextEditing()`).
+- **`src/session.js`** — the session survives reloads. Settings: the
+  keys of `state` listed in its `VALIDATORS` go to `localStorage`
+  (`liquid-gradient:settings:v1`); on load each saved value is used only
+  if it passes its validator, so stale/garbage data falls back to the
+  default per key. `main.js` keeps the factory values in `DEFAULTS`
+  (double-click reset and "✕" on the grain color use those, not the
+  restored ones) and saves with one debounced capture-phase listener
+  for input/change/click/drop plus `pagehide` — every state change comes
+  from a user event, so new controls are covered automatically, but a
+  **new state key must be added to `VALIDATORS`** or it won't persist.
+  Exported files: IndexedDB `liquid-gradient` › `results` (Blob + name,
+  size, `batch`), capped at `MAX_SAVED_RESULTS` (30) — the oldest are
+  deleted from both the DB and the gallery. `batch` is the export
+  click's timestamp; every card of the newest batch (WebM + MP4 = two
+  files) gets the "Последнее" badge. Storage errors only `console.warn`.
 - **`src/render/shaders.js`** — GLSL source as template strings
   (`VERTEX_SHADER`, `FRAGMENT_SHADER`), plus the vendored 4D simplex
   noise (`SIMPLEX_4D`). The vertex shader draws a fullscreen triangle

@@ -845,6 +845,7 @@ select option {
 }
 
 .result-preview {
+  position: relative;
   height: 100px;
   border-radius: 10px;
   overflow: hidden;
@@ -857,6 +858,20 @@ select option {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* --on-accent on --accent: 12:1. */
+.result-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .result-meta {
