@@ -624,6 +624,9 @@ function addResult({ name, blob, isVideo, width, height }) {
   const link = node.querySelector('.result-download');
   link.href = url;
   link.download = name;
+  // WebM and MP4 of one export share a name and thumbnail, so say which is which.
+  const ext = name.slice(name.lastIndexOf('.') + 1);
+  link.textContent = `Скачать ${FORMAT_LABELS[ext] ?? ext.toUpperCase()}`;
   el.results.prepend(node);
   el.gallery.hidden = false;
   el.results.scrollLeft = 0;
