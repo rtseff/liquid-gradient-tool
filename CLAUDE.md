@@ -94,7 +94,9 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   deleted from both the DB and the gallery. `batch` is the export
   click's timestamp; every card of the newest batch (WebM + MP4 = two
   files) gets the "Последнее" badge. Storage errors only `console.warn`.
-- **Pattern history** (`#patternHistory`, bottom of `.canvas-wrap`) — the
+- **Pattern history** (`#patternHistory` in `.pattern-bar` at the bottom
+  of `.canvas-wrap`, right of the "↻ Новый узор" button, which drops its
+  text below a 460px-wide preview) — the
   last `MAX_PATTERN_HISTORY` (5) seeds, newest first, as
   `state.patternHistory = [{ seed, createdAt }]`, persisted like any
   other state key. "Новый узор" unshifts an entry; clicking one only

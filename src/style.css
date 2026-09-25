@@ -694,23 +694,51 @@ select option {
 
 /* --- Pattern history ------------------------------------------------- */
 
-.pattern-history {
+/* "Новый узор" on the left, then the history strip. */
+.pattern-bar {
   position: absolute;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
   display: flex;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px;
   max-width: calc(100% - 32px);
+  border-radius: 16px;
+  background: var(--field);
+}
+
+.pattern-new {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+}
+
+.pattern-new > [aria-hidden] {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.pattern-new:hover {
+  border-color: var(--text-muted);
+}
+
+.pattern-history {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
   /* Safety net only: the container query below sizes items to fit
      without scrolling at every layout width we support, same as
      .results (~line 903) hides its scrollbar because main.js drives
      that one by wheel instead. */
   overflow-x: auto;
   scrollbar-width: none;
-  border-radius: 16px;
-  background: var(--field);
 }
 
 .pattern-history::-webkit-scrollbar {
@@ -780,9 +808,18 @@ select option {
    ~1700px of viewport width, where .canvas-wrap is the narrow column of
    a wider multi-column grid) — shrink the strip's items instead. */
 @container (max-width: 700px) {
-  .pattern-history {
+  .pattern-bar {
     gap: 6px;
     padding: 6px;
+  }
+
+  .pattern-history {
+    gap: 6px;
+  }
+
+  .pattern-new {
+    height: 32px;
+    padding: 0 10px;
   }
 
   .pattern-item {
@@ -796,6 +833,19 @@ select option {
 
   .pattern-time {
     font-size: 10px;
+  }
+}
+
+/* Too narrow for the label next to five items: keep just the ↻ glyph
+   (the button's accessible name still comes from the hidden text). */
+@container (max-width: 460px) {
+  .pattern-new-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 }
 
@@ -1113,10 +1163,19 @@ select option {
     --pattern-strip-h: 96px;
   }
 
-  .pattern-history {
+  .pattern-bar {
     bottom: 10px;
     gap: 6px;
     padding: 6px;
+  }
+
+  .pattern-history {
+    gap: 6px;
+  }
+
+  .pattern-new {
+    height: 32px;
+    padding: 0 10px;
   }
 
   .pattern-item {

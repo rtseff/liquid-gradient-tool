@@ -39,7 +39,6 @@
         <div class="card">
           <div class="card-header">
             <h2>Форма потока</h2>
-            <button id="newPatternBtn" class="text-btn" type="button" title="Тот же характер движения, другой рисунок">↻ Новый узор</button>
           </div>
           <div class="sliders">
             <label class="slider">
@@ -138,7 +137,12 @@
         <span class="radius-handle" data-corner="bl" role="slider" tabindex="-1" aria-hidden="true"></span>
         <span class="radius-handle" data-corner="br" role="slider" tabindex="-1" aria-hidden="true"></span>
       </div>
-      <div id="patternHistory" class="pattern-history" role="group" aria-label="История узоров"></div>
+      <div class="pattern-bar">
+        <button id="newPatternBtn" class="text-btn pattern-new" type="button" title="Тот же характер движения, другой рисунок">
+          <span aria-hidden="true">↻</span><span class="pattern-new-label"> Новый узор</span>
+        </button>
+        <div id="patternHistory" class="pattern-history" role="group" aria-label="История узоров"></div>
+      </div>
     </section>
 
     <section class="card output" aria-label="Экспорт">
