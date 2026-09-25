@@ -3,7 +3,15 @@ import { exportWebm } from './export/exportWebm.js';
 import { exportVideo } from './export/exportVideo.js';
 import { exportGif } from './export/exportGif.js';
 import { PRESETS, presetGradientCss } from './presets.js';
-import { loadSettings, saveSettings, saveResult, loadResults, deleteResults, MAX_SAVED_RESULTS } from './session.js';
+import {
+  loadSettings,
+  saveSettings,
+  saveResult,
+  loadResults,
+  deleteResults,
+  MAX_SAVED_RESULTS,
+  MAX_PATTERN_HISTORY,
+} from './session.js';
 
 const MAX_COLORS = 6;
 const MIN_COLORS = 2;
@@ -18,6 +26,9 @@ const state = {
   softness: 0.3,
   speed: 0.5, // raw slider value 0..1, eased into an amplitude via speedToAmplitude()
   seed: [randomSeedValue(), randomSeedValue()],
+  // Last MAX_PATTERN_HISTORY patterns, newest first, including the
+  // current one: { seed: [number, number], createdAt: Date.now() }.
+  patternHistory: [],
   grainEnabled: false,
   grainSize: 1, // px in the exported file
   grainDensity: 0.5,
@@ -40,6 +51,17 @@ const state = {
 // session's settings on top — see session.js.
 const DEFAULTS = structuredClone(state);
 Object.assign(state, loadSettings());
+
+function seedsEqual(a, b) {
+  return a[0] === b[0] && a[1] === b[1];
+}
+
+// First run, or a session saved before pattern history existed: seed the
+// history with the current pattern so it's never empty.
+if (!state.patternHistory.some((item) => seedsEqual(item.seed, state.seed))) {
+  state.patternHistory.unshift({ seed: [...state.seed], createdAt: Date.now() });
+  state.patternHistory = state.patternHistory.slice(0, MAX_PATTERN_HISTORY);
+}
 
 const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF' };
 
@@ -103,6 +125,7 @@ const el = {
   undoColorBtn: document.getElementById('undoColorBtn'),
   redoColorBtn: document.getElementById('redoColorBtn'),
   newPatternBtn: document.getElementById('newPatternBtn'),
+  patternHistory: document.getElementById('patternHistory'),
   scale: document.getElementById('scale'),
   scaleOut: document.getElementById('scaleOut'),
   warp: document.getElementById('warp'),
@@ -156,6 +179,7 @@ const el = {
 };
 
 const colorRowTemplate = document.getElementById('colorRowTemplate');
+const patternItemTemplate = document.getElementById('patternItemTemplate');
 const resultTemplate = document.getElementById('resultTemplate');
 
 // --- Presets ---------------------------------------------------------------
@@ -384,7 +408,90 @@ bindRange(el.bitrate, el.bitrateOut, 'bitrate', (v) => `${v.toFixed(1)} Мбит
 
 el.newPatternBtn.addEventListener('click', () => {
   state.seed = [randomSeedValue(), randomSeedValue()];
+  state.patternHistory.unshift({ seed: [...state.seed], createdAt: Date.now() });
+  state.patternHistory = state.patternHistory.slice(0, MAX_PATTERN_HISTORY);
+  renderPatternHistory();
 });
+
+// --- Pattern history --------------------------------------------------
+//
+// A strip of the last MAX_PATTERN_HISTORY patterns in the preview area.
+// Clicking an entry restores its seed without touching the order or
+// timestamps; the active entry is the one whose seed matches state.seed.
+
+// The on-screen label is a bare age ("3 мин", "21 ч") so it fits even
+// the 48px items without an ellipsis — the strip itself says these are
+// past patterns. The title/aria-label carries the full phrase ("3 минуты
+// назад") and starts with the visible text (WCAG 2.5.3 Label in Name).
+const rtf = new Intl.RelativeTimeFormat('ru', { numeric: 'auto' });
+const SHORT_UNITS = { minute: 'мин', hour: 'ч', day: 'дн' };
+
+function relativeTimeParts(createdAt) {
+  const diffSec = Math.floor((Date.now() - createdAt) / 1000);
+  if (diffSec < 60) return null; // "только что" has no numeric unit
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return [diffMin, 'minute'];
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return [diffHour, 'hour'];
+  return [Math.floor(diffHour / 24), 'day'];
+}
+
+function shortAgeLabel(createdAt) {
+  const parts = relativeTimeParts(createdAt);
+  return parts ? `${parts[0]} ${SHORT_UNITS[parts[1]]}` : 'сейчас';
+}
+
+function longAgeLabel(createdAt) {
+  const parts = relativeTimeParts(createdAt);
+  return parts ? rtf.format(-parts[0], parts[1]) : 'только что';
+}
+
+// { btn, item, thumbCanvas } for the strip's current buttons, kept
+// around so updatePatternActive()/updatePatternTimes() can refresh them
+// without recreating the <canvas> thumbnails (which would lose their
+// rendered pixels for nothing).
+let patternButtons = [];
+
+function updatePatternActive() {
+  patternButtons.forEach(({ btn, item }) => {
+    btn.setAttribute('aria-pressed', String(seedsEqual(item.seed, state.seed)));
+  });
+}
+
+function updatePatternTimes() {
+  patternButtons.forEach(({ btn, item, timeEl }) => {
+    const short = shortAgeLabel(item.createdAt);
+    timeEl.textContent = short;
+    const title = `${short} — вернуть узор, созданный ${longAgeLabel(item.createdAt)}`;
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+  });
+}
+
+function renderPatternHistory() {
+  el.patternHistory.innerHTML = '';
+  patternButtons = state.patternHistory.map((item) => {
+    const node = patternItemTemplate.content.firstElementChild.cloneNode(true);
+    const thumbCanvas = node.querySelector('.pattern-thumb');
+    const timeEl = node.querySelector('.pattern-time');
+    node.addEventListener('click', () => {
+      // Export and the preview loop share one canvas; the loop already
+      // skips rendering while exporting, so switching the seed mid-export
+      // would just be silently ignored until it finishes — refuse it
+      // instead so the click isn't lost.
+      if (exporting) return;
+      state.seed = [...item.seed];
+      updatePatternActive();
+    });
+    el.patternHistory.appendChild(node);
+    return { btn: node, item, thumbCanvas, timeEl };
+  });
+  updatePatternActive();
+  updatePatternTimes();
+}
+
+renderPatternHistory();
+setInterval(updatePatternTimes, 30000);
 
 // --- Grain layer ----------------------------------------------------------
 
@@ -563,9 +670,60 @@ function currentParams(fps = state.fps) {
   };
 }
 
+// Pattern-history thumbnails share the one WebGL canvas with the live
+// preview, so they're drawn first each frame (into their own 2D <canvas>
+// via drawImage right after each WebGL render, while the drawing buffer
+// is still valid) and the preview's own render — the one that's actually
+// on screen — runs last and restores the canvas to the preview size.
+// Redrawn only when the params that affect them change, and throttled so
+// dragging a slider doesn't re-render 5 thumbnails every frame.
+const THUMB_LONG_SIDE = 144;
+const THUMB_THROTTLE_MS = 150;
+let lastPatternSignature = null;
+let lastPatternThumbRender = 0;
+
+function thumbSize() {
+  if (state.width >= state.height) {
+    return { w: THUMB_LONG_SIDE, h: Math.max(1, Math.round((THUMB_LONG_SIDE * state.height) / state.width)) };
+  }
+  return { w: Math.max(1, Math.round((THUMB_LONG_SIDE * state.width) / state.height)), h: THUMB_LONG_SIDE };
+}
+
+function patternSignature() {
+  return JSON.stringify([
+    state.colors,
+    state.scale,
+    state.warp,
+    state.softness,
+    state.speed, // amplitude moves the phase-0 point too
+    state.width,
+    state.height,
+    state.patternHistory.map((item) => item.seed),
+  ]);
+}
+
+function renderPatternThumbnails() {
+  if (!patternButtons.length) return;
+  const { w: tw, h: th } = thumbSize();
+  const baseParams = currentParams();
+  for (const { item, thumbCanvas } of patternButtons) {
+    renderer.setSize(tw, th);
+    renderer.render({ ...baseParams, seed: item.seed, grain: { ...baseParams.grain, enabled: false } }, 0);
+    thumbCanvas.width = tw;
+    thumbCanvas.height = th;
+    thumbCanvas.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+  }
+}
+
 const previewStart = performance.now();
 function previewLoop(now) {
   if (!exporting) {
+    const signature = patternSignature();
+    if (signature !== lastPatternSignature && now - lastPatternThumbRender > THUMB_THROTTLE_MS) {
+      lastPatternSignature = signature;
+      lastPatternThumbRender = now;
+      renderPatternThumbnails();
+    }
     const elapsedSec = (now - previewStart) / 1000;
     const phase = (elapsedSec % state.duration) / state.duration;
     renderer.setSize(state.width, state.height);

@@ -625,13 +625,27 @@ select option {
   border: 1px solid var(--border);
   border-radius: 24px;
   overflow: hidden;
+  /* Height of the pattern-history strip pinned at the bottom, so
+     .canvas-box (below) can reserve room for it instead of the canvas
+     sitting underneath it. Bumped on the short mobile layout below. */
+  --pattern-strip-h: 86px;
+  /* The strip's own item size reacts to how much width .canvas-wrap
+     actually has (not the viewport), since at some viewports it's the
+     narrower of several grid columns. */
+  container-type: inline-size;
 }
 
 /* Absolutely positioned so the canvas's intrinsic size (the export size,
-   e.g. 1600×900) never feeds back into the grid row height. */
+   e.g. 1600×900) never feeds back into the grid row height. The bottom
+   inset additionally reserves the pattern-history strip's height so the
+   canvas never sits underneath it. */
 .canvas-box {
+  --inset: clamp(16px, 5%, 96px);
   position: absolute;
-  inset: clamp(16px, 5%, 96px);
+  top: var(--inset);
+  left: var(--inset);
+  right: var(--inset);
+  bottom: calc(var(--inset) + var(--pattern-strip-h));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -642,6 +656,113 @@ select option {
   max-width: 100%;
   max-height: 100%;
   border-radius: 16px;
+}
+
+/* --- Pattern history ------------------------------------------------- */
+
+.pattern-history {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  max-width: calc(100% - 32px);
+  /* Safety net only: the container query below sizes items to fit
+     without scrolling at every layout width we support, same as
+     .results (~line 903) hides its scrollbar because main.js drives
+     that one by wheel instead. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-radius: 16px;
+  background: var(--field);
+}
+
+.pattern-history::-webkit-scrollbar {
+  display: none;
+}
+
+.pattern-item {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  /* Stretch (not center) so .pattern-time below can go width: 100% and
+     truncate with an ellipsis instead of growing the button to fit its
+     label — otherwise longer labels ("21 ч. назад") made the row uneven. */
+  align-items: stretch;
+  gap: 4px;
+  width: 72px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pattern-thumb {
+  display: block;
+  width: 72px;
+  height: 48px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border);
+  background: var(--panel);
+  object-fit: cover;
+}
+
+.pattern-item:hover .pattern-thumb {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 1px;
+}
+
+.pattern-item[aria-pressed='true'] .pattern-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.pattern-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+.pattern-time {
+  overflow: hidden;
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-muted);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pattern-item[aria-pressed='true'] .pattern-time {
+  color: var(--text);
+}
+
+/* Below this, 5 full-size (72px) items don't fit .canvas-wrap's own
+   width without scrolling (measured: overflow from ~1024px up to
+   ~1700px of viewport width, where .canvas-wrap is the narrow column of
+   a wider multi-column grid) — shrink the strip's items instead. */
+@container (max-width: 700px) {
+  .pattern-history {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .pattern-item {
+    width: 48px;
+  }
+
+  .pattern-thumb {
+    width: 48px;
+    height: 32px;
+  }
+
+  .pattern-time {
+    font-size: 10px;
+  }
 }
 
 /* --- Export panel ------------------------------------------------------- */
@@ -951,6 +1072,30 @@ select option {
     height: 34vh;
     min-height: 180px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    /* Own height is short here (34vh, min 180px), so the strip is kept
+       to the same small size the container query below 700px already
+       uses, and this taller value leaves a real gap above it instead of
+       the canvas touching the strip. */
+    --pattern-strip-h: 96px;
+  }
+
+  .pattern-history {
+    bottom: 10px;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .pattern-item {
+    width: 48px;
+  }
+
+  .pattern-thumb {
+    width: 48px;
+    height: 32px;
+  }
+
+  .pattern-time {
+    font-size: 10px;
   }
 }
 
