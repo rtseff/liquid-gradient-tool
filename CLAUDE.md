@@ -27,20 +27,33 @@ needs the browser's H.264 encoder).
 
 ## Testing / verification
 
-There is no test suite, linter, or build in this repo. Verification in
-this project has been done ad hoc with Playwright against a local
-static server. Playwright is available globally in this environment
-but is not a project dependency, so it must be pointed at explicitly:
+There is no linter or build in this repo, but there is one automated
+test: **`tests/seam.cjs`**. It's CommonJS on purpose (the repo has no
+`package.json`, so `NODE_PATH=$(npm root -g)` is how it finds the
+globally-installed Playwright, which is otherwise not a project
+dependency). It needs no `npm install`:
 
 ```bash
-NODE_PATH=$(npm root -g) node -e "
-const { chromium } = require('playwright');
-(async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-  // ...
-})();
-"
+NODE_PATH=$(npm root -g) node tests/seam.cjs 2>&1 | grep -v "GL Driver\|Automatic fallback"
 ```
+
+`tests/seam.cjs` spins up a plain Node `http` server over the repo root
+(plus a virtual `/__seam.html` test page that imports
+`LiquidGradientRenderer.js` directly — it never touches `main.js` or the
+real UI), drives it with Playwright/Chromium
+(`executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium'`),
+and for a matrix of cases — amplitude 0.001/0.125/1, `loops` 1 and 2,
+grain off and on (blend `normal`/`overlay`/`softlight`, sizes 1 and 3,
+120 frames), 2–6 colors, different seeds, and an odd canvas size
+(97×61) as well as the normal 160×90 — renders `phase = 0.0` and
+`phase = 1.0` (`gl.finish()` then `gl.readPixels(...)`) and asserts the
+two framebuffers are byte-identical, per "The seamless-loop technique"
+below. It also asserts phase 0 vs phase 0.5 at amplitude 1 *differ*, so
+the test can't pass trivially. Exits non-zero on any mismatch or page
+error. Verified to actually catch a broken loop via a `--self-test`
+flag that deliberately shifts the seed used for `phase = 1.0` on one
+case and expects (and gets) a `FAIL` there:
+`NODE_PATH=$(npm root -g) node tests/seam.cjs --self-test 2>&1 | grep -v "GL Driver\|Automatic fallback"`.
 
 Do not run `playwright install` — the browser is pre-installed at that
 path. Headless/software WebGL (swiftshader) logs noisy
@@ -49,12 +62,14 @@ path. Headless/software WebGL (swiftshader) logs noisy
 call; pipe test output through `grep -v "GL Driver\|Automatic fallback\|404"`.
 
 When changing anything that touches timing/animation, don't just eyeball
-a screenshot — verify the loop is still seamless by reading back pixels
-for `phase = 0.0` vs `phase = 1.0` directly from the renderer
-(`gl.finish()` then `gl.readPixels(...)`); they must be bit-identical.
-See "The seamless-loop technique" below for why that's the actual
-invariant, and why it holds for any `amplitude`/`loops` value, not just
-`loops = 1`.
+a screenshot — run `tests/seam.cjs` (or, for a one-off check outside its
+matrix, read back pixels for `phase = 0.0` vs `phase = 1.0` directly
+from the renderer the same way it does — `gl.finish()` then
+`gl.readPixels(...)`; they must be bit-identical). See "The
+seamless-loop technique" below for why that's the actual invariant, and
+why it holds for any `amplitude`/`loops` value, not just `loops = 1` —
+`tests/seam.cjs` covers both `loops` values and a range of amplitudes
+for exactly that reason.
 
 ## Architecture
 
