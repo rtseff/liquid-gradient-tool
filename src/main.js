@@ -29,6 +29,9 @@ const state = {
   // Last MAX_PATTERN_HISTORY patterns, newest first, including the
   // current one: { seed: [number, number], createdAt: Date.now() }.
   patternHistory: [],
+  // Preview-only corner radius, as a share of the canvas's short side:
+  // 0.5 turns a 1:1 preview into a circle. Never reaches the export.
+  previewRadius: 0.025,
   grainEnabled: false,
   grainSize: 1, // px in the exported file
   grainDensity: 0.5,
@@ -715,6 +718,105 @@ function renderPatternThumbnails() {
     thumbCanvas.getContext('2d').drawImage(canvas, 0, 0, tw, th);
   }
 }
+
+// --- Preview corner radius ------------------------------------------------
+//
+// Drag any corner handle toward the centre to round the preview's corners
+// (the exported file stays a full rectangle — see CLAUDE.md). Positions
+// are measured with getBoundingClientRect() and turned into a fraction of
+// the short side, so the root CSS zoom set by boot.js cancels out.
+
+const radiusHandles = [...document.querySelectorAll('.radius-handle')];
+const MAX_PREVIEW_RADIUS = 0.5;
+// Handles never sit closer than this to the edges, so they stay grabbable
+// at radius 0 (layout px, like the offsets they're added to).
+const HANDLE_MIN_INSET = 12;
+
+function applyPreviewRadius() {
+  const short = Math.min(canvas.offsetWidth, canvas.offsetHeight);
+  const radiusPx = state.previewRadius * short;
+  canvas.style.borderRadius = `${radiusPx}px`;
+  const inset = Math.max(radiusPx * (1 - Math.SQRT1_2), HANDLE_MIN_INSET);
+  const { offsetLeft: x, offsetTop: y, offsetWidth: w, offsetHeight: h } = canvas;
+  radiusHandles.forEach((handle) => {
+    const { corner } = handle.dataset;
+    handle.style.left = `${corner[1] === 'l' ? x + inset : x + w - inset}px`;
+    handle.style.top = `${corner[0] === 't' ? y + inset : y + h - inset}px`;
+  });
+  const percent = Math.round((state.previewRadius / MAX_PREVIEW_RADIUS) * 100);
+  radiusHandles[0].setAttribute('aria-valuenow', String(percent));
+  radiusHandles[0].setAttribute('aria-valuetext', `${Math.round(radiusPx)} px`);
+}
+
+function setPreviewRadius(value) {
+  state.previewRadius = Math.min(MAX_PREVIEW_RADIUS, Math.max(0, value));
+  applyPreviewRadius();
+}
+
+radiusHandles[0].setAttribute('aria-valuemin', '0');
+radiusHandles[0].setAttribute('aria-valuemax', '100');
+
+// How far a pointer is in from the handle's corner, along the diagonal.
+function inwardDistance(e, corner, rect) {
+  const dx = corner[1] === 'l' ? e.clientX - rect.left : rect.right - e.clientX;
+  const dy = corner[0] === 't' ? e.clientY - rect.top : rect.bottom - e.clientY;
+  return (dx + dy) / 2;
+}
+
+for (const handle of radiusHandles) {
+  handle.title = 'Потяните к центру — скругление углов превью. Двойной клик — по умолчанию';
+  let drag = null;
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('is-dragging');
+    const rect = canvas.getBoundingClientRect();
+    drag = { start: inwardDistance(e, handle.dataset.corner, rect), radius: state.previewRadius };
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    // Relative to where the drag started: the handle is clamped to
+    // HANDLE_MIN_INSET at small radii, so an absolute mapping would jump.
+    // It rides the corner arc's midpoint, r·(1 − 1/√2) in from each edge,
+    // hence the division.
+    const rect = canvas.getBoundingClientRect();
+    const delta = inwardDistance(e, handle.dataset.corner, rect) - drag.start;
+    setPreviewRadius(drag.radius + delta / (1 - Math.SQRT1_2) / Math.min(rect.width, rect.height));
+  });
+  const endDrag = () => {
+    drag = null;
+    handle.classList.remove('is-dragging');
+    scheduleSave();
+  };
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+  handle.addEventListener('dblclick', () => {
+    setPreviewRadius(DEFAULTS.previewRadius);
+    scheduleSave();
+  });
+}
+
+radiusHandles[0].addEventListener('keydown', (e) => {
+  const step = e.shiftKey ? 0.05 : 0.01;
+  const next = {
+    ArrowUp: state.previewRadius + step,
+    ArrowRight: state.previewRadius + step,
+    ArrowDown: state.previewRadius - step,
+    ArrowLeft: state.previewRadius - step,
+    Home: 0,
+    End: MAX_PREVIEW_RADIUS,
+  }[e.key];
+  if (next === undefined) return;
+  e.preventDefault();
+  setPreviewRadius(next);
+  scheduleSave();
+});
+
+// The canvas's displayed size follows the window and the export size.
+// The box too: its canvas can move without resizing (letterboxing).
+const radiusObserver = new ResizeObserver(applyPreviewRadius);
+radiusObserver.observe(canvas);
+radiusObserver.observe(canvas.parentElement);
 
 const previewStart = performance.now();
 function previewLoop(now) {

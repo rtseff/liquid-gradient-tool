@@ -113,6 +113,17 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   that changes the phase-0 image must be added to `patternSignature()`**,
   or thumbnails go stale. `.canvas-box` reserves `--pattern-strip-h` at
   the bottom so the canvas never sits under the strip.
+- **Preview corner radius** (`.radius-handle` ×4 in `.canvas-box`) —
+  **preview only**, the export stays a full rectangle (the user chose
+  this; see "Removed on purpose"). `state.previewRadius` is a share of
+  the canvas's short side, 0…0.5 (0.5 on a 1:1 size = circle), applied
+  as a px `border-radius` by `applyPreviewRadius()`, re-run by a
+  ResizeObserver on the canvas and its box. Handles sit on each corner
+  arc's midpoint (`r·(1 − 1/√2)` in, min 12px) and drag *relative* to
+  the pointerdown point. Pointer math uses `getBoundingClientRect()`
+  ratios only, so boot.js's root `zoom` cancels out. The first handle is
+  the keyboard `role="slider"` (arrows, Shift = ×5, Home/End); the other
+  three are `aria-hidden`.
 - **`src/render/shaders.js`** — GLSL source as template strings
   (`VERTEX_SHADER`, `FRAGMENT_SHADER`), plus the vendored 4D simplex
   noise (`SIMPLEX_4D`). The vertex shader draws a fullscreen triangle

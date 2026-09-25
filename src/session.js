@@ -49,6 +49,7 @@ const VALIDATORS = {
   speed: numberIn(0, 1),
   seed: isSeed,
   patternHistory: isPatternHistory,
+  previewRadius: numberIn(0, 0.5),
   grainEnabled: (v) => typeof v === 'boolean',
   grainSize: (v) => Number.isInteger(v) && v >= 1 && v <= 8,
   grainDensity: numberIn(0.02, 1),
