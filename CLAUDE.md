@@ -27,20 +27,33 @@ needs the browser's H.264 encoder).
 
 ## Testing / verification
 
-There is no test suite, linter, or build in this repo. Verification in
-this project has been done ad hoc with Playwright against a local
-static server. Playwright is available globally in this environment
-but is not a project dependency, so it must be pointed at explicitly:
+There is no linter or build in this repo, but there is one automated
+test: **`tests/seam.cjs`**. It's CommonJS on purpose (the repo has no
+`package.json`, so `NODE_PATH=$(npm root -g)` is how it finds the
+globally-installed Playwright, which is otherwise not a project
+dependency). It needs no `npm install`:
 
 ```bash
-NODE_PATH=$(npm root -g) node -e "
-const { chromium } = require('playwright');
-(async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-  // ...
-})();
-"
+NODE_PATH=$(npm root -g) node tests/seam.cjs 2>&1 | grep -v "GL Driver\|Automatic fallback"
 ```
+
+`tests/seam.cjs` spins up a plain Node `http` server over the repo root
+(plus a virtual `/__seam.html` test page that imports
+`LiquidGradientRenderer.js` directly — it never touches `main.js` or the
+real UI), drives it with Playwright/Chromium
+(`executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium'`),
+and for a matrix of cases — amplitude 0.001/0.125/1, `loops` 1 and 2,
+grain off and on (blend `normal`/`overlay`/`softlight`, sizes 1 and 3,
+120 frames), 2–6 colors, different seeds, and an odd canvas size
+(97×61) as well as the normal 160×90 — renders `phase = 0.0` and
+`phase = 1.0` (`gl.finish()` then `gl.readPixels(...)`) and asserts the
+two framebuffers are byte-identical, per "The seamless-loop technique"
+below. It also asserts phase 0 vs phase 0.5 at amplitude 1 *differ*, so
+the test can't pass trivially. Exits non-zero on any mismatch or page
+error. Verified to actually catch a broken loop via a `--self-test`
+flag that deliberately shifts the seed used for `phase = 1.0` on one
+case and expects (and gets) a `FAIL` there:
+`NODE_PATH=$(npm root -g) node tests/seam.cjs --self-test 2>&1 | grep -v "GL Driver\|Automatic fallback"`.
 
 Do not run `playwright install` — the browser is pre-installed at that
 path. Headless/software WebGL (swiftshader) logs noisy
@@ -49,12 +62,14 @@ path. Headless/software WebGL (swiftshader) logs noisy
 call; pipe test output through `grep -v "GL Driver\|Automatic fallback\|404"`.
 
 When changing anything that touches timing/animation, don't just eyeball
-a screenshot — verify the loop is still seamless by reading back pixels
-for `phase = 0.0` vs `phase = 1.0` directly from the renderer
-(`gl.finish()` then `gl.readPixels(...)`); they must be bit-identical.
-See "The seamless-loop technique" below for why that's the actual
-invariant, and why it holds for any `amplitude`/`loops` value, not just
-`loops = 1`.
+a screenshot — run `tests/seam.cjs` (or, for a one-off check outside its
+matrix, read back pixels for `phase = 0.0` vs `phase = 1.0` directly
+from the renderer the same way it does — `gl.finish()` then
+`gl.readPixels(...)`; they must be bit-identical). See "The
+seamless-loop technique" below for why that's the actual invariant, and
+why it holds for any `amplitude`/`loops` value, not just `loops = 1` —
+`tests/seam.cjs` covers both `loops` values and a range of amplitudes
+for exactly that reason.
 
 ## Architecture
 
@@ -92,14 +107,60 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   Exported files: IndexedDB `liquid-gradient` › `results` (Blob + name,
   size, `batch`), capped at `MAX_SAVED_RESULTS` (30) — the oldest are
   deleted from both the DB and the gallery. `batch` is the export
-  click's timestamp; every card of the newest batch (WebM + MP4 = two
-  files) gets the "Последнее" badge. Storage errors only `console.warn`.
-- **Pattern history** (`#patternHistory`, bottom of `.canvas-wrap`) — the
+  click's timestamp; every card of the newest batch (WebM + MP4 + PNG
+  poster = up to three files) gets the "Последнее" badge. Storage errors
+  only `console.warn`.
+- **Settings link** — "Скопировать ссылку на настройки" (below
+  `#formatHint` in the export card) copies
+  `location.origin + location.pathname + '#s=' + base64url(JSON)`, the
+  JSON being every `VALIDATORS` key from `session.js` *except*
+  `patternHistory` (personal) and `previewRadius` (preview-only cosmetic)
+  — see `LINK_EXCLUDED_SETTINGS` and `SETTINGS_KEYS` in `main.js`.
+  base64url is UTF-8-safe (`TextEncoder` → `btoa` over the raw bytes,
+  then `+/` → `-_`, padding stripped). On load, a `#s=` hash is decoded
+  and passed through `session.js`'s exported `validateSettings(obj)` —
+  the same per-key check `loadSettings()` uses — before being applied
+  over the restored settings, right where `Object.assign(state,
+  loadSettings())` already sits, so a seed carried by the link flows
+  into the pattern-history seeding right below it. A broken/tampered
+  hash is caught and ignored (`showStatus` reports the error). Either
+  way `history.replaceState()` strips the hash immediately so a reload
+  doesn't reapply it, and a successful import is saved right away with
+  `saveSettings()` since it didn't come from a user event.
+  Import also drops `LINK_EXCLUDED_SETTINGS`, and a link with nothing
+  valid left reports an error. The import code runs once at module load,
+  so a `#s=` pasted into an already-open tab triggers a `hashchange` →
+  `location.reload()` (deferred to the end of a running export).
+- **Pattern history** (`#patternHistory` in `.pattern-bar` at the bottom
+  of `.canvas-wrap`, right of the "↻ Новый узор" button, which drops its
+  text below a 460px-wide preview; **N** — `e.code === 'KeyN'`, so it
+  works in any keyboard layout — clicks that same button, unless a text
+  field has focus, an export is running, or it's a key-repeat) — the
   last `MAX_PATTERN_HISTORY` (5) seeds, newest first, as
-  `state.patternHistory = [{ seed, createdAt }]`, persisted like any
-  other state key. "Новый узор" unshifts an entry; clicking one only
-  sets `state.seed` (order and timestamps never change); `aria-pressed`
-  marks the entry whose seed equals `state.seed`. On load the current
+  `state.patternHistory = [{ seed, createdAt, pinned?, params }]`,
+  persisted like any other state key. `params` is the entry's own look
+  (`PATTERN_KEYS` in session.js: colors, scale, warp, softness, speed).
+  "Новый узор" unshifts an entry with the current look; clicking one
+  sets `state.seed` and restores its `params` into the sliders and
+  palette (`applyPatternParams()`; a palette change goes on the undo
+  stack). The *active* entry follows the controls (`syncActivePattern()`
+  each preview frame), so edits stay with it; other entries never
+  change. Thumbnails render each entry with its own `params`. Entries
+  saved before `params` existed get the current look on load. Order and
+  timestamps never change;
+  `aria-pressed` marks the entry whose seed equals `state.seed`. Each
+  entry also has a ☆/★ pin toggle (`.pattern-pin`, layered over the
+  thumbnail's corner via a `.pattern-slot` wrapper — `<button>` can't
+  nest inside `<button>`) — pinned entries are exempt from eviction:
+  `pushPatternHistory()` in `main.js` drops the oldest *unpinned* entry
+  once the list exceeds `MAX_PATTERN_HISTORY`, never a pinned one.
+  Pinning is capped at `MAX_PINNED_PATTERNS` (`MAX_PATTERN_HISTORY − 1`
+  = 4) — one slot short of the cap, so a freshly generated pattern
+  always has somewhere to land; past the cap, other entries' pin buttons
+  go `disabled`. `isPatternHistory` rejects a saved history with more
+  than 4 pins. `.pattern-pin` is a 24×24 hit target (WCAG 2.2 target
+  size) with a smaller visible disc drawn by `::before` at `z-index: -1`;
+  the button's own `z-index: 1` keeps that disc above the thumbnail. On load the current
   seed is added if missing, so the strip is never empty. Labels: a
   bare age on screen ("42 с", "3 мин", fits 48px items), the full
   `Intl.RelativeTimeFormat('ru')` phrase in title/aria-label; refreshed
@@ -108,11 +169,22 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   `!exporting` branch, before the preview's own render, at phase 0 with
   grain off, and copied into per-item 2D canvases with `drawImage` right
   after each draw; the preview render afterwards restores the size. They
-  redraw only when `patternSignature()` changes (colors, scale, warp,
-  softness, speed, size, history seeds), throttled. **A new shader param
+  redraw only when `patternSignature()` changes (export size, each
+  entry's seed and params), throttled. **A new shader param
   that changes the phase-0 image must be added to `patternSignature()`**,
   or thumbnails go stale. `.canvas-box` reserves `--pattern-strip-h` at
   the bottom so the canvas never sits under the strip.
+- **Preview corner radius** (`.radius-handle` ×4 in `.canvas-box`) —
+  **preview only**, the export stays a full rectangle (the user chose
+  this; see "Removed on purpose"). `state.previewRadius` is a share of
+  the canvas's short side, 0…0.5 (0.5 on a 1:1 size = circle), applied
+  as a px `border-radius` by `applyPreviewRadius()`, re-run by a
+  ResizeObserver on the canvas and its box. Handles sit on each corner
+  arc's midpoint (`r·(1 − 1/√2)` in, min 12px) and drag *relative* to
+  the pointerdown point. Pointer math uses `getBoundingClientRect()`
+  ratios only, so boot.js's root `zoom` cancels out. The first handle is
+  the keyboard `role="slider"` (arrows, Shift = ×5, Home/End); the other
+  three are `aria-hidden`.
 - **`src/render/shaders.js`** — GLSL source as template strings
   (`VERTEX_SHADER`, `FRAGMENT_SHADER`), plus the vendored 4D simplex
   noise (`SIMPLEX_4D`). The vertex shader draws a fullscreen triangle
@@ -120,33 +192,86 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
 - **`src/render/LiquidGradientRenderer.js`** — thin WebGL2 wrapper.
   Compiles/links the program once in the constructor; `render(params,
   phase)` sets all uniforms and issues one draw call. No textures.
-- **Exporters** all take a `renderFrame(phase)` callback (which just
-  calls `renderer.render(currentParams(), phase)`) and drive it
+- **Export never reads live `state`.** `el.exportBtn`'s click handler
+  takes one `structuredClone` snapshot of the export-relevant `state`
+  keys (`snapshotExportState()`, `EXPORT_STATE_KEYS` in `main.js`) before
+  starting anything, and every exporter — including its `renderFrame`
+  callback — is given that snapshot, never `state`. For `'webm+mp4'` both
+  files come from the same snapshot. This is what makes an export
+  immune to the user moving a slider, editing a color or picking a new
+  pattern while it runs: exporters take shader params via `buildParams
+  (source, fps)`, a `source`-agnostic version of what used to be
+  `currentParams()` (`currentParams(fps)` is now just
+  `buildParams(state, fps)`, still used by the live preview and pattern
+  thumbnails). Adding a new export-affecting control means adding its
+  key to both `EXPORT_STATE_KEYS` and `VALIDATORS` (session.js) — the
+  latter for persistence, the former so export snapshots it.
+  Controls are also made inert while exporting (`inertPanels` in
+  `setBusy()`: `.controls`, `.pattern-bar`, `.output-settings`) so none
+  of this is left silently doing nothing — `#exportBtn`/`#exportProgress`
+  (which holds `#cancelExportBtn`) sit outside all three and stay
+  reachable; the preview's corner-radius handles are preview-only and
+  are deliberately left alone. `setBusy()` also moves focus to `#cancelExportBtn` on
+  start and back to `#exportBtn` at the end (only if focus was on the
+  export controls or `<body>`), both with `preventScroll`.
+- **Cancelling an export** goes through a plain `AbortController` created
+  fresh per export click and stored so `#cancelExportBtn` can call
+  `.abort()` on it. `exportVideo`/`exportGif` take a `signal` and check
+  `signal.throwIfAborted()` between frames (and, for `exportVideo`, while
+  draining the encoder queue), so a cancellation surfaces as a normal
+  rejection with `err.name === 'AbortError'` — the click handler treats
+  that specially: no `console.error`, no entry in the failure list,
+  status becomes "Экспорт отменён." (`kind: 'cancelled'`, a dedicated,
+  non-red `.status[data-kind]` style), and for `'webm+mp4'` the loop
+  breaks instead of starting the second container. Whatever file(s) had
+  already finished stay in the gallery. `exportVideo.js` closes its
+  `VideoEncoder` exactly once via a small `closeEncoder()` guarded by a
+  `encoderClosed` flag in a `finally`, since `.close()` throws if called
+  twice and abort can land mid-loop before `flush()`/`close()` would
+  otherwise run. `exportGif.js` can't simply skip a step: once frame
+  rendering has finished, gif.js's own `render()`/worker pipeline is
+  already the only way to stop, so cancelling then calls the GIF's
+  `.abort()` (present in `vendor/gifjs/gif.js`) and the pending promise
+  rejects with the abort signal's reason.
+- **PNG poster.** `state.poster` (bool, default `true`; in
+  `EXPORT_STATE_KEYS`/`VALIDATORS`) adds a checkbox in `.output-settings`,
+  hidden for GIF. For video formats, after the container(s) export, the
+  click handler renders the same snapshot's phase 0 at export size
+  (`renderer.setSize`/`render`) and calls `canvas.toBlob(...,
+  'image/png')` immediately after — safe because the GL context is
+  created with `preserveDrawingBuffer: true`. Saved via `addResult` as
+  `liquid-gradient-WxH.png`, same `batch`, `isVideo: false` (shown as
+  `<img>`); `FORMAT_LABELS.png` gives the download button "Скачать PNG".
+- **"HTML" copy button** on every video result card (fresh or restored
+  from IndexedDB — added in `renderResult()`, keyed off `isVideo`) copies
+  a `<video autoplay muted loop playsinline poster="...">` snippet built
+  from that card's `data-batch` siblings: `<source>` for each of
+  webm/mp4 present (webm first), `poster` only if that batch has a PNG.
+  Uses `navigator.clipboard.writeText`; button label flips to
+  "Скопировано" for 1.5s, or `showStatus` reports a clipboard failure.
+- **Size preset buttons** (`.size-preset-btn`, under the width×height
+  fields) call the existing `applyResolution()`; `aria-pressed` tracks
+  whether `state.width`/`height` match, refreshed by
+  `updateSizePresetActive()` on every `applyResolution()` call.
+- **Exporters** all take a `renderFrame(phase)` callback and drive it
   frame-by-frame at exact `phase = i / totalFrames` steps. The UI has one
   export button; `state.format` is `'webm+mp4' | 'webm' | 'mp4' | 'gif'`
   and `'webm+mp4'` runs the two video exports sequentially, keeping the
   WebM even if MP4 fails (typically: no H.264 encoder).
-  - **`src/export/exportVideo.js`** — default path for WebM and MP4:
-    WebCodecs `VideoEncoder` (VP9 / H.264 High) with `bitrate` from the
-    UI and `alpha: 'discard'`, timestamps from the frame index (not the
-    clock), packed by the vendored muxers. Codec level strings are
-    computed from size × fps via the H.264 / VP9 level tables in that
-    file — encoders reject configs whose level is too low.
-    `videoSupportProblem()` probes `isConfigSupported` and distinguishes
-    "no encoder" from "unsupported size/fps".
+  - **`src/export/exportVideo.js`** — the only video path (WebM and
+    MP4 both): WebCodecs `VideoEncoder` (VP9 / H.264 High) with
+    `bitrate` from the UI and `alpha: 'discard'`, timestamps from the
+    frame index (not the clock), packed by the vendored muxers. Codec
+    level strings are computed from size × fps via the H.264 / VP9
+    level tables in that file — encoders reject configs whose level is
+    too low. `videoSupportProblem()` probes `isConfigSupported` and
+    distinguishes "no encoder" from "unsupported size/fps".
   - **webm-muxer writes the wrong duration**: it sets Segment › Info ›
     Duration to the *start* of the last frame (48 frames @ 24 fps →
     1.958 s), so players give the loop's last frame ~0 time.
     `setWebmDuration()` patches that EBML element after `finalize()`.
     mp4-muxer is fine (uses chunk durations). Verify both with a
     `<video>`'s `duration` after any muxer change.
-  - **`src/export/exportWebm.js`** — `MediaRecorder` path, used only
-    when "Убрать из WebM" (remove alpha) is unchecked: Chrome's
-    MediaRecorder writes VP9 with an alpha plane (`AlphaMode = 1`) for
-    canvas captures even though our pixels are opaque, and WebCodecs
-    here reports `alpha: 'keep'` for VP9 as unsupported. It stamps
-    frames by wall clock, so it paces against an absolute schedule and
-    still stretches the video if rendering is slower than real time.
   - **`src/export/exportGif.js`** — gif.js, renders as fast as possible
     with explicit per-frame delays.
 - **H.264 can't be tested in this sandbox**: the pre-installed Chromium
@@ -166,6 +291,16 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   frames at default settings (1600×900 → 480×270 GIF) were a cropped
   top-left corner of the full-size render. Any new export path must go
   through `setBusy(true)` too.
+- **Preview renders at screen size, not export size** (grain off):
+  `previewRenderSize` = the export aspect contain-fit into `.canvas-box`
+  × `devicePixelRatio` × boot.js's root `zoom`, capped at the export
+  size, `h` derived from `w` so the aspect matches to the pixel. With
+  grain on it's the full export size (grain is in output pixels).
+  Cached; recomputed by `refreshPreviewRenderSize()` on a ResizeObserver
+  over `.canvas-box`, `applyResolution()` and the grain toggle, never per
+  frame. It also sets `canvas.style.width/height` explicitly — otherwise
+  `max-width/max-height: 100%` would size the canvas from its (now
+  smaller) buffer. Exports and thumbnails set their own size as before.
 - **UI layout** follows the Figma mock (file `crJpeY2AsxP794ZHPIIQwd`,
   node `2001:115`; its colors are the tokens on `:root` in `style.css`).
   `.layout` is one flat CSS grid with named areas: `.controls` (colors +
@@ -244,11 +379,13 @@ cell centres read as a visible grid).
 - **Animated, and still seamless.** The grain re-rolls every frame:
   `frame = mod(floor(u_phase * u_grainFrames + 0.5), u_grainFrames)` is
   the hash's z. `u_grainFrames` must equal the exporter's frame count
-  (`round(fps × duration)`), which `currentParams(fps)` computes via
-  `loopFrames()` — GIF passes its own capped fps, so don't render GIF
-  frames with the default `currentParams()`. The `mod` makes phase 1.0
-  frame 0 again (verified: phase 0 vs 1 bit-identical for all blend
-  modes); the `+ 0.5` stops `i / n * n` rounding down to `i − 1`.
+  (`round(fps × duration)`), which `buildParams(source, fps)` computes
+  via `loopFrames(fps, source.duration)` — GIF passes its own capped
+  fps (and, mid-export, the export snapshot's `duration`, not
+  `state.duration`), so don't render GIF frames with the default
+  `currentParams()`. The `mod` makes phase 1.0 frame 0 again (verified:
+  phase 0 vs 1 bit-identical for all blend modes); the `+ 0.5` stops
+  `i / n * n` rounding down to `i − 1`.
 - Randomness: Dave Hoskins' "Hash without Sine" (`hash13` / `hash23`,
   xy = cell, z = frame). Checked at size 1: changed-pixel share matched
   density (0.101 / 0.499 / 0.9 for 10 / 50 / 90%); variance 100% gives

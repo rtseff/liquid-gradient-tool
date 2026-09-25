@@ -16,6 +16,10 @@ export const MAX_SAVED_RESULTS = 30;
 // builds).
 export const MAX_PATTERN_HISTORY = 5;
 
+// What each pattern-history entry remembers besides its seed: the look
+// it had, so switching to it restores its form and palette.
+export const PATTERN_KEYS = Object.freeze(['colors', 'scale', 'warp', 'softness', 'speed']);
+
 // --- Settings ---------------------------------------------------------------
 
 const HEX = /^#[0-9a-f]{6}$/;
@@ -29,9 +33,18 @@ const isSeed = (v) => Array.isArray(v) && v.length === 2 && v.every(numberIn(-1e
 // future version) is rejected wholesale, same as any other out-of-range
 // value, and the default (an empty array, then re-seeded from
 // state.seed) takes over.
+// pinned is optional: absent (or not present at all) means "not pinned",
+// so old saved histories from before pinning existed still validate.
+// Pinning is capped at MAX_PATTERN_HISTORY - 1 in main.js (one slot short
+// of the strip so a freshly generated pattern always has somewhere to
+// land) — a saved history with more pinned entries than that could only
+// come from a version whose cap was raised or from tampering, and
+// pushPatternHistory() assumes at least one unpinned entry always exists,
+// so such a history is rejected wholesale rather than partially trusted.
 const isPatternHistory = (v) =>
   Array.isArray(v) &&
   v.length <= MAX_PATTERN_HISTORY &&
+  v.filter((item) => item && item.pinned).length <= MAX_PATTERN_HISTORY - 1 &&
   v.every(
     (item) =>
       item &&
@@ -39,7 +52,14 @@ const isPatternHistory = (v) =>
       isSeed(item.seed) &&
       typeof item.createdAt === 'number' &&
       Number.isFinite(item.createdAt) &&
-      item.createdAt > 0,
+      item.createdAt > 0 &&
+      (item.pinned === undefined || typeof item.pinned === 'boolean') &&
+      // params is optional too (histories saved before it existed get the
+      // current look on load); when present, every key must be valid.
+      (item.params === undefined ||
+        (item.params &&
+          typeof item.params === 'object' &&
+          PATTERN_KEYS.every((key) => VALIDATORS[key](item.params[key])))),
   );
 const VALIDATORS = {
   colors: (v) => Array.isArray(v) && v.length >= 2 && v.length <= 6 && v.every((c) => typeof c === 'string' && HEX.test(c)),
@@ -49,6 +69,7 @@ const VALIDATORS = {
   speed: numberIn(0, 1),
   seed: isSeed,
   patternHistory: isPatternHistory,
+  previewRadius: numberIn(0, 0.5),
   grainEnabled: (v) => typeof v === 'boolean',
   grainSize: (v) => Number.isInteger(v) && v >= 1 && v <= 8,
   grainDensity: numberIn(0.02, 1),
@@ -63,9 +84,26 @@ const VALIDATORS = {
   fps: oneOf(24, 30, 60),
   format: oneOf('webm+mp4', 'webm', 'mp4', 'gif'),
   bitrate: numberIn(0.5, 10),
-  removeAlpha: (v) => typeof v === 'boolean',
   gifWidth: numberIn(240, 960),
+  poster: (v) => typeof v === 'boolean',
 };
+
+// All VALIDATORS keys, for callers (the settings-link export in main.js)
+// that need "every persisted setting" without duplicating the list.
+export const SETTINGS_KEYS = Object.freeze(Object.keys(VALIDATORS));
+
+// Filters an arbitrary object down to the keys VALIDATORS knows about,
+// keeping only values that pass their validator — used both for the
+// localStorage blob (loadSettings) and for settings decoded from a
+// shared link (main.js), so both paths reject the same malformed data.
+export function validateSettings(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  const result = {};
+  for (const [key, isValid] of Object.entries(VALIDATORS)) {
+    if (key in obj && isValid(obj[key])) result[key] = obj[key];
+  }
+  return result;
+}
 
 export function loadSettings() {
   let saved;
@@ -74,12 +112,7 @@ export function loadSettings() {
   } catch {
     return {};
   }
-  if (!saved || typeof saved !== 'object') return {};
-  const result = {};
-  for (const [key, isValid] of Object.entries(VALIDATORS)) {
-    if (key in saved && isValid(saved[key])) result[key] = saved[key];
-  }
-  return result;
+  return validateSettings(saved);
 }
 
 export function saveSettings(state) {

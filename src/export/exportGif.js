@@ -20,7 +20,9 @@ async function loadGifLibrary() {
 /**
  * Renders the seamless loop frame-by-frame at the given resolution and
  * encodes it into an animated GIF using gif.js. Frames are generated as
- * fast as the GPU allows (no real-time pacing needed, unlike WebM).
+ * fast as the GPU allows — no real-time pacing needed, since the GIF's
+ * own per-frame delays (not wall-clock timing during capture) set its
+ * playback speed.
  *
  * @param {object} opts
  * @param {HTMLCanvasElement} opts.canvas source canvas, must already be sized to width/height
@@ -31,6 +33,7 @@ async function loadGifLibrary() {
  * @param {number} opts.duration seconds
  * @param {number} [opts.quality] gif.js quality, 1 (best/slowest) - 30 (worst/fastest)
  * @param {(progress: number, stage: 'render' | 'encode') => void} [opts.onProgress]
+ * @param {AbortSignal} [opts.signal] checked between frames; aborting rejects with an AbortError
  * @returns {Promise<Blob>}
  */
 export async function exportGif({
@@ -42,6 +45,7 @@ export async function exportGif({
   duration,
   quality = 10,
   onProgress,
+  signal,
 }) {
   const GIF = await loadGifLibrary();
   const workerScript = new URL('../../vendor/gifjs/gif.worker.js', import.meta.url).href;
@@ -58,6 +62,7 @@ export async function exportGif({
   const delayMs = 1000 / fps;
 
   for (let i = 0; i < totalFrames; i++) {
+    signal?.throwIfAborted();
     const phase = i / totalFrames;
     renderFrame(phase);
     gif.addFrame(canvas, { delay: delayMs, copy: true });
@@ -66,14 +71,30 @@ export async function exportGif({
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
+  // Rendering finished before any cancellation — check once more before
+  // committing to gif.js's own encoding stage, which is cancelled via
+  // gif.abort() instead (there's no render() to simply not call once it
+  // has started).
+  signal?.throwIfAborted();
+
   gif.on('progress', (p) => onProgress?.(p, 'encode'));
 
   const blob = await new Promise((resolve, reject) => {
-    gif.on('finished', (blob) => resolve(blob));
-    gif.on('abort', () => reject(new Error('Кодирование GIF прервано.')));
+    const onAbortSignal = () => gif.abort();
+    signal?.addEventListener('abort', onAbortSignal);
+    const cleanup = () => signal?.removeEventListener('abort', onAbortSignal);
+    gif.on('finished', (blob) => {
+      cleanup();
+      resolve(blob);
+    });
+    gif.on('abort', () => {
+      cleanup();
+      reject(signal?.aborted ? signal.reason : new Error('Кодирование GIF прервано.'));
+    });
     try {
       gif.render();
     } catch (err) {
+      cleanup();
       reject(err);
     }
   });

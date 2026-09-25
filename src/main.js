@@ -1,17 +1,58 @@
 import { LiquidGradientRenderer } from './render/LiquidGradientRenderer.js';
-import { exportWebm } from './export/exportWebm.js';
 import { exportVideo } from './export/exportVideo.js';
 import { exportGif } from './export/exportGif.js';
 import { PRESETS, presetGradientCss } from './presets.js';
 import {
   loadSettings,
   saveSettings,
+  validateSettings,
+  SETTINGS_KEYS,
   saveResult,
   loadResults,
   deleteResults,
   MAX_SAVED_RESULTS,
   MAX_PATTERN_HISTORY,
+  PATTERN_KEYS,
 } from './session.js';
+
+// Settings shared via "Скопировать ссылку на настройки" leave out
+// patternHistory (personal — not something a link recipient should
+// inherit) and previewRadius (a preview-only cosmetic, not part of the
+// gradient itself).
+const LINK_EXCLUDED_SETTINGS = new Set(['patternHistory', 'previewRadius']);
+
+// Max pinned pattern-history entries — one slot short of the strip's
+// cap so a freshly generated pattern always has room (see
+// pushPatternHistory()).
+const MAX_PINNED_PATTERNS = MAX_PATTERN_HISTORY - 1;
+
+// base64url, safe for UTF-8: TextEncoder -> btoa over the raw bytes,
+// then the usual +/ -> -_ swap and padding strip (and the reverse for
+// decoding). Used for the settings-link hash.
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBytes(b64url) {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function encodeSettingsLink(obj) {
+  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(obj)));
+}
+
+function decodeSettingsLink(b64url) {
+  return new TextDecoder().decode(base64UrlToBytes(b64url));
+}
 
 const MAX_COLORS = 6;
 const MIN_COLORS = 2;
@@ -29,6 +70,9 @@ const state = {
   // Last MAX_PATTERN_HISTORY patterns, newest first, including the
   // current one: { seed: [number, number], createdAt: Date.now() }.
   patternHistory: [],
+  // Preview-only corner radius, as a share of the canvas's short side:
+  // 0.5 turns a 1:1 preview into a circle. Never reaches the export.
+  previewRadius: 0.025,
   grainEnabled: false,
   grainSize: 1, // px in the exported file
   grainDensity: 0.5,
@@ -43,8 +87,8 @@ const state = {
   fps: 30,
   format: 'webm+mp4', // 'webm+mp4' | 'webm' | 'mp4' | 'gif'
   bitrate: 1.5, // Mbit/s
-  removeAlpha: true,
   gifWidth: 480,
+  poster: true, // export a phase-0 PNG alongside video formats
 };
 
 // Factory values (double-click / reset targets), then the previous
@@ -52,18 +96,96 @@ const state = {
 const DEFAULTS = structuredClone(state);
 Object.assign(state, loadSettings());
 
+// "Скопировать ссылку на настройки" import: a `#s=<base64url JSON>` hash
+// overrides the restored settings once. Applied here, before the
+// pattern-history seeding below, so a seed carried by the link is picked
+// up by that same "add current seed if missing" logic. The hash is then
+// stripped (so reloading doesn't reapply it) and, since this change
+// didn't come from a user event, saved immediately rather than waiting
+// for the debounced auto-save. Status is shown once `el` exists, below.
+let pendingLinkStatus = null;
+const settingsLinkMatch = location.hash.match(/(?:^|[&#])s=([^&]*)/);
+if (settingsLinkMatch) {
+  try {
+    const validated = validateSettings(JSON.parse(decodeSettingsLink(settingsLinkMatch[1])));
+    // Mirror LINK_EXCLUDED_SETTINGS on the way in, not just the way out —
+    // a hand-built or older link could still carry patternHistory/
+    // previewRadius, and those are personal/preview-only, never something
+    // a link recipient should inherit.
+    const imported = {};
+    for (const [key, value] of Object.entries(validated)) {
+      if (!LINK_EXCLUDED_SETTINGS.has(key)) imported[key] = value;
+    }
+    if (Object.keys(imported).length === 0) {
+      // Nothing usable survived validation/filtering (e.g. `{}`, a
+      // wrong-shaped payload, or a link that only carried excluded keys)
+      // — treat it the same as a broken link rather than claiming success.
+      throw new Error('empty settings payload');
+    }
+    Object.assign(state, imported);
+    pendingLinkStatus = { message: 'Настройки из ссылки применены.', kind: 'success' };
+  } catch (err) {
+    console.warn('Broken settings link:', err);
+    pendingLinkStatus = { message: 'Не удалось прочитать ссылку с настройками — она повреждена.', kind: 'error' };
+  }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+
+// Pasting a settings link into an *already open* tab only changes the
+// hash — no navigation happens, so none of the import logic above (which
+// only runs once, at module load) would ever see it. Reloading re-runs
+// this module from scratch, which picks the new `#s=` up like any other
+// page load.
+// A link pasted while an export runs waits for it to finish (setBusy)
+// instead of silently killing it with a reload.
+let reloadAfterExport = false;
+window.addEventListener('hashchange', () => {
+  if (!/(?:^|[&#])s=([^&]*)/.test(location.hash)) return;
+  if (exporting) reloadAfterExport = true;
+  else location.reload();
+});
+
 function seedsEqual(a, b) {
   return a[0] === b[0] && a[1] === b[1];
+}
+
+// Adds a new entry to the front of pattern history. If that pushes the
+// list past MAX_PATTERN_HISTORY, the oldest *unpinned* entry is dropped
+// instead of always the oldest, so pinned patterns survive "Новый узор".
+// Pinning is capped at MAX_PINNED_PATTERNS (below), which leaves at
+// least one unpinned entry to evict whenever the strip is full.
+function pushPatternHistory(entry) {
+  state.patternHistory.unshift(entry);
+  while (state.patternHistory.length > MAX_PATTERN_HISTORY) {
+    let oldestUnpinnedIndex = -1;
+    for (let i = state.patternHistory.length - 1; i >= 0; i--) {
+      if (!state.patternHistory[i].pinned) {
+        oldestUnpinnedIndex = i;
+        break;
+      }
+    }
+    if (oldestUnpinnedIndex === -1) break; // shouldn't happen: see cap above
+    state.patternHistory.splice(oldestUnpinnedIndex, 1);
+  }
+}
+
+// The look a history entry keeps: its own copy of PATTERN_KEYS.
+function patternParamsOf(source) {
+  const params = {};
+  for (const key of PATTERN_KEYS) params[key] = structuredClone(source[key]);
+  return params;
 }
 
 // First run, or a session saved before pattern history existed: seed the
 // history with the current pattern so it's never empty.
 if (!state.patternHistory.some((item) => seedsEqual(item.seed, state.seed))) {
-  state.patternHistory.unshift({ seed: [...state.seed], createdAt: Date.now() });
-  state.patternHistory = state.patternHistory.slice(0, MAX_PATTERN_HISTORY);
+  pushPatternHistory({ seed: [...state.seed], createdAt: Date.now(), params: patternParamsOf(state) });
 }
+// Entries saved before they carried params: best guess is the current look.
+for (const item of state.patternHistory) item.params ??= patternParamsOf(state);
+if (pendingLinkStatus?.kind === 'success') saveSettings(state);
 
-const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF' };
+const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF', png: 'PNG' };
 
 const FORMAT_HINTS = {
   'webm+mp4': 'Для hero-секции: WebM (VP9) — основной файл, MP4 (H.264) — запасной для Safari. Подключайте оба через <source>.',
@@ -108,9 +230,9 @@ function speedToAmplitude(rawSpeed) {
   return rawSpeed ** 3;
 }
 
-function gifSize() {
-  const width = Math.min(state.gifWidth, state.width);
-  return { width, height: Math.round((width * state.height) / state.width) };
+function gifSize(source = state) {
+  const width = Math.min(source.gifWidth, source.width);
+  return { width, height: Math.round((width * source.height) / source.width) };
 }
 
 // --- DOM refs -------------------------------------------------------------
@@ -136,6 +258,7 @@ const el = {
   speedOut: document.getElementById('speedOut'),
   customWidth: document.getElementById('customWidth'),
   customHeight: document.getElementById('customHeight'),
+  sizePresetBtns: [...document.querySelectorAll('.size-preset-btn')],
   duration: document.getElementById('duration'),
   fps: document.getElementById('fps'),
   grainEnabled: document.getElementById('grainEnabled'),
@@ -160,18 +283,20 @@ const el = {
   bitrateField: document.getElementById('bitrateField'),
   bitrate: document.getElementById('bitrate'),
   bitrateOut: document.getElementById('bitrateOut'),
-  alphaField: document.getElementById('alphaField'),
-  removeAlpha: document.getElementById('removeAlpha'),
   gifWidthField: document.getElementById('gifWidthField'),
   gifWidth: document.getElementById('gifWidth'),
   gifWidthOut: document.getElementById('gifWidthOut'),
+  posterField: document.getElementById('posterField'),
+  poster: document.getElementById('poster'),
   exportBtn: document.getElementById('exportBtn'),
   exportLabel: document.getElementById('exportLabel'),
   exportMeta: document.getElementById('exportMeta'),
   formatHint: document.getElementById('formatHint'),
+  copySettingsLinkBtn: document.getElementById('copySettingsLinkBtn'),
   exportProgress: document.getElementById('exportProgress'),
   progressFill: document.getElementById('progressFill'),
   progressLabel: document.getElementById('progressLabel'),
+  cancelExportBtn: document.getElementById('cancelExportBtn'),
   statusLine: document.getElementById('statusLine'),
   gallery: document.getElementById('gallery'),
   galleryScroll: document.querySelector('.gallery-scroll'),
@@ -181,6 +306,36 @@ const el = {
 const colorRowTemplate = document.getElementById('colorRowTemplate');
 const patternItemTemplate = document.getElementById('patternItemTemplate');
 const resultTemplate = document.getElementById('resultTemplate');
+
+// showStatus() is defined further down but hoisted, and el.statusLine
+// exists as of the line above, so the settings-link result (parsed near
+// the top of the module, before el existed) can be surfaced here.
+if (pendingLinkStatus) showStatus(pendingLinkStatus.message, pendingLinkStatus.kind);
+
+el.copySettingsLinkBtn.addEventListener('click', () => copySettingsLink(el.copySettingsLinkBtn));
+
+// Builds `#s=<base64url JSON>` from every persisted setting except
+// patternHistory/previewRadius (see LINK_EXCLUDED_SETTINGS) and copies
+// it to the clipboard — same "Скопировано" idiom as copyResultHtml().
+async function copySettingsLink(btn) {
+  const data = {};
+  for (const key of SETTINGS_KEYS) {
+    if (LINK_EXCLUDED_SETTINGS.has(key)) continue;
+    data[key] = state[key];
+  }
+  const url = `${location.origin}${location.pathname}#s=${encodeSettingsLink(data)}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    const original = btn.textContent;
+    btn.textContent = 'Скопировано';
+    setTimeout(() => {
+      btn.textContent = original;
+    }, 1500);
+  } catch (err) {
+    console.warn(err);
+    showStatus('Не удалось скопировать ссылку — скопируйте вручную из буфера обмена браузера.', 'error');
+  }
+}
 
 // --- Presets ---------------------------------------------------------------
 
@@ -376,10 +531,24 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// "N" for "Новый узор" — e.code so it works in any keyboard layout
+// (including Russian, where e.key would be a Cyrillic letter).
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyN') return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if (isTextEditing(e.target) || exporting) return;
+  e.preventDefault();
+  el.newPatternBtn.click();
+});
+
 renderColorList();
 updateHistoryButtons();
 
 // --- Sliders -------------------------------------------------------------
+
+// key -> the slider's apply(), so code that changes state (switching to a
+// history entry) can move the slider with it.
+const rangeAppliers = {};
 
 function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
   const defaultValue = DEFAULTS[key];
@@ -394,6 +563,7 @@ function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
     onChange?.();
   };
   apply(state[key]);
+  rangeAppliers[key] = apply;
   input.title = 'Двойной клик — значение по умолчанию';
   input.addEventListener('input', () => apply(parseFloat(input.value)));
   input.addEventListener('dblclick', () => apply(defaultValue));
@@ -408,8 +578,7 @@ bindRange(el.bitrate, el.bitrateOut, 'bitrate', (v) => `${v.toFixed(1)} Мбит
 
 el.newPatternBtn.addEventListener('click', () => {
   state.seed = [randomSeedValue(), randomSeedValue()];
-  state.patternHistory.unshift({ seed: [...state.seed], createdAt: Date.now() });
-  state.patternHistory = state.patternHistory.slice(0, MAX_PATTERN_HISTORY);
+  pushPatternHistory({ seed: [...state.seed], createdAt: Date.now(), params: patternParamsOf(state) });
   renderPatternHistory();
 });
 
@@ -446,10 +615,11 @@ function longAgeLabel(createdAt) {
   return rtf.format(-value, unit);
 }
 
-// { btn, item, thumbCanvas } for the strip's current buttons, kept
-// around so updatePatternActive()/updatePatternTimes() can refresh them
-// without recreating the <canvas> thumbnails (which would lose their
-// rendered pixels for nothing).
+// { slot, btn, item, thumbCanvas, timeEl, pinBtn } for the strip's
+// current buttons, kept around so updatePatternActive()/
+// updatePatternTimes()/updatePatternPins() can refresh them without
+// recreating the <canvas> thumbnails (which would lose their rendered
+// pixels for nothing).
 let patternButtons = [];
 
 function updatePatternActive() {
@@ -468,26 +638,84 @@ function updatePatternTimes() {
   });
 }
 
+// Refreshes every pin button's glyph/label and, once MAX_PINNED_PATTERNS
+// pinned entries exist, disables the pin button on the rest (they'd have
+// nowhere to go — see pushPatternHistory()).
+function updatePatternPins() {
+  const pinnedCount = state.patternHistory.filter((item) => item.pinned).length;
+  patternButtons.forEach(({ slot, pinBtn, item }) => {
+    const pinned = Boolean(item.pinned);
+    pinBtn.textContent = pinned ? '★' : '☆';
+    pinBtn.setAttribute('aria-pressed', String(pinned));
+    slot.classList.toggle('is-pinned', pinned);
+    const atCap = !pinned && pinnedCount >= MAX_PINNED_PATTERNS;
+    pinBtn.disabled = atCap;
+    const label = pinned ? 'Открепить узор' : 'Закрепить узор';
+    pinBtn.title = atCap ? `Можно закрепить не больше ${MAX_PINNED_PATTERNS}` : label;
+    pinBtn.setAttribute('aria-label', label);
+  });
+}
+
+function togglePatternPin(item) {
+  if (item.pinned) {
+    delete item.pinned;
+  } else {
+    const pinnedCount = state.patternHistory.filter((i) => i.pinned).length;
+    if (pinnedCount >= MAX_PINNED_PATTERNS) return;
+    item.pinned = true;
+  }
+  updatePatternPins();
+}
+
+// Switching to an entry brings back its look: sliders move, the palette
+// is re-rendered and lands on the palette undo stack like any other edit.
+function applyPatternParams(params) {
+  const colorsChanged = params.colors.join(',') !== state.colors.join(',');
+  for (const key of PATTERN_KEYS) {
+    if (key === 'colors') state.colors = [...params.colors];
+    else rangeAppliers[key](params[key]);
+  }
+  if (colorsChanged) {
+    pushColorHistory();
+    renderColorList();
+  }
+}
+
+// The active entry follows the controls, so edits made while it is
+// selected are still there after switching away and back. Other entries
+// keep their own params. Called every preview frame; cheap (5 small keys).
+function syncActivePattern() {
+  const active = state.patternHistory.find((item) => seedsEqual(item.seed, state.seed));
+  if (!active) return;
+  const current = patternParamsOf(state);
+  if (JSON.stringify(active.params) !== JSON.stringify(current)) active.params = current;
+}
+
 function renderPatternHistory() {
   el.patternHistory.innerHTML = '';
   patternButtons = state.patternHistory.map((item) => {
-    const node = patternItemTemplate.content.firstElementChild.cloneNode(true);
-    const thumbCanvas = node.querySelector('.pattern-thumb');
-    const timeEl = node.querySelector('.pattern-time');
-    node.addEventListener('click', () => {
+    const slot = patternItemTemplate.content.firstElementChild.cloneNode(true);
+    const btn = slot.querySelector('.pattern-item');
+    const thumbCanvas = slot.querySelector('.pattern-thumb');
+    const timeEl = slot.querySelector('.pattern-time');
+    const pinBtn = slot.querySelector('.pattern-pin');
+    btn.addEventListener('click', () => {
       // Export and the preview loop share one canvas; the loop already
       // skips rendering while exporting, so switching the seed mid-export
       // would just be silently ignored until it finishes — refuse it
       // instead so the click isn't lost.
       if (exporting) return;
       state.seed = [...item.seed];
+      applyPatternParams(item.params);
       updatePatternActive();
     });
-    el.patternHistory.appendChild(node);
-    return { btn: node, item, thumbCanvas, timeEl };
+    pinBtn.addEventListener('click', () => togglePatternPin(item));
+    el.patternHistory.appendChild(slot);
+    return { slot, btn, item, thumbCanvas, timeEl, pinBtn };
   });
   updatePatternActive();
   updatePatternTimes();
+  updatePatternPins();
 }
 
 renderPatternHistory();
@@ -528,6 +756,7 @@ updateGrainVisibility();
 el.grainEnabled.addEventListener('change', () => {
   state.grainEnabled = el.grainEnabled.checked;
   updateGrainVisibility();
+  refreshPreviewRenderSize();
 });
 
 // Same swatch <-> hex behavior as the palette rows: apply a hex as soon as
@@ -558,8 +787,8 @@ el.grainColorReset.addEventListener('click', () => {
 
 // --- Output settings --------------------------------------------------------
 
-function videoContainers() {
-  return { 'webm+mp4': ['webm', 'mp4'], webm: ['webm'], mp4: ['mp4'], gif: [] }[state.format];
+function videoContainers(format = state.format) {
+  return { 'webm+mp4': ['webm', 'mp4'], webm: ['webm'], mp4: ['mp4'], gif: [] }[format];
 }
 
 function updateOutputMeta() {
@@ -567,7 +796,7 @@ function updateOutputMeta() {
   const isGif = state.format === 'gif';
   el.bitrateField.hidden = isGif;
   el.gifWidthField.hidden = !isGif;
-  el.alphaField.hidden = !containers.includes('webm');
+  el.posterField.hidden = isGif;
 
   el.exportLabel.textContent = `Экспорт ${FORMAT_LABELS[state.format]}`;
   const seconds = `${state.duration.toFixed(1)} с`;
@@ -583,11 +812,7 @@ function updateOutputMeta() {
       `${state.width}×${state.height} - ${seconds} - ${state.fps} fps - ~${formatBytes(approxBytes)}${perFile}`;
   }
 
-  let hint = FORMAT_HINTS[state.format];
-  if (containers.includes('webm') && !state.removeAlpha) {
-    hint += ' WebM с альфа-каналом записывается в реальном времени.';
-  }
-  el.formatHint.textContent = hint;
+  el.formatHint.textContent = FORMAT_HINTS[state.format];
 }
 
 el.format.value = state.format;
@@ -596,17 +821,33 @@ el.format.addEventListener('change', () => {
   updateOutputMeta();
 });
 
-el.removeAlpha.checked = state.removeAlpha;
-el.removeAlpha.addEventListener('change', () => {
-  state.removeAlpha = el.removeAlpha.checked;
-  updateOutputMeta();
+el.poster.checked = state.poster;
+el.poster.addEventListener('change', () => {
+  state.poster = el.poster.checked;
 });
+
+function updateSizePresetActive() {
+  el.sizePresetBtns.forEach((btn) => {
+    const match = Number(btn.dataset.w) === state.width && Number(btn.dataset.h) === state.height;
+    btn.setAttribute('aria-pressed', String(match));
+  });
+}
 
 function applyResolution(w, h) {
   state.width = w;
   state.height = h;
   updateOutputMeta();
+  refreshPreviewRenderSize();
+  updateSizePresetActive();
 }
+
+el.sizePresetBtns.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    applyResolution(Number(btn.dataset.w), Number(btn.dataset.h));
+    el.customWidth.value = state.width;
+    el.customHeight.value = state.height;
+  });
+});
 
 // Rounded to even: H.264 (4:2:0) encoders reject odd frame dimensions.
 function clampSize(value, fallback) {
@@ -617,6 +858,7 @@ function clampSize(value, fallback) {
 
 el.customWidth.value = state.width;
 el.customHeight.value = state.height;
+updateSizePresetActive();
 el.customWidth.addEventListener('change', () => {
   applyResolution(clampSize(el.customWidth.value, state.width), state.height);
   el.customWidth.value = state.width;
@@ -644,31 +886,38 @@ updateOutputMeta();
 
 // Frames in one loop, computed exactly like the exporters do, so the
 // grain re-rolls once per exported frame. GIF passes its own (≤ 30) fps.
-function loopFrames(fps) {
-  return Math.max(1, Math.round(fps * state.duration));
+function loopFrames(fps, duration) {
+  return Math.max(1, Math.round(fps * duration));
+}
+
+// Builds shader-ready params from any state-shaped object — the live
+// `state` for the preview/thumbnails, or an export snapshot (see
+// "Export" below) so a frame mid-export never reads the live state.
+function buildParams(source, fps) {
+  return {
+    colors: source.colors,
+    scale: source.scale,
+    warp: source.warp,
+    softness: source.softness,
+    loops: 1,
+    speed: speedToAmplitude(source.speed),
+    seed: source.seed,
+    grain: {
+      enabled: source.grainEnabled,
+      size: source.grainSize,
+      density: source.grainDensity,
+      opacity: source.grainOpacity,
+      variance: source.grainVariance,
+      softness: source.grainSoftness,
+      blend: source.grainBlend,
+      color: source.grainColor,
+      frames: loopFrames(fps, source.duration),
+    },
+  };
 }
 
 function currentParams(fps = state.fps) {
-  return {
-    colors: state.colors,
-    scale: state.scale,
-    warp: state.warp,
-    softness: state.softness,
-    loops: 1,
-    speed: speedToAmplitude(state.speed),
-    seed: state.seed,
-    grain: {
-      enabled: state.grainEnabled,
-      size: state.grainSize,
-      density: state.grainDensity,
-      opacity: state.grainOpacity,
-      variance: state.grainVariance,
-      softness: state.grainSoftness,
-      blend: state.grainBlend,
-      color: state.grainColor,
-      frames: loopFrames(fps),
-    },
-  };
+  return buildParams(state, fps);
 }
 
 // Pattern-history thumbnails share the one WebGL canvas with the live
@@ -692,33 +941,203 @@ function thumbSize() {
 
 function patternSignature() {
   return JSON.stringify([
-    state.colors,
-    state.scale,
-    state.warp,
-    state.softness,
-    state.speed, // amplitude moves the phase-0 point too
     state.width,
     state.height,
-    state.patternHistory.map((item) => item.seed),
+    // Each entry's own look (speed included: amplitude moves the phase-0
+    // point too).
+    state.patternHistory.map((item) => [item.seed, item.params]),
   ]);
 }
 
 function renderPatternThumbnails() {
   if (!patternButtons.length) return;
   const { w: tw, h: th } = thumbSize();
-  const baseParams = currentParams();
   for (const { item, thumbCanvas } of patternButtons) {
+    const params = buildParams({ ...state, ...item.params, seed: item.seed }, state.fps);
     renderer.setSize(tw, th);
-    renderer.render({ ...baseParams, seed: item.seed, grain: { ...baseParams.grain, enabled: false } }, 0);
+    renderer.render({ ...params, grain: { ...params.grain, enabled: false } }, 0);
     thumbCanvas.width = tw;
     thumbCanvas.height = th;
     thumbCanvas.getContext('2d').drawImage(canvas, 0, 0, tw, th);
   }
 }
 
+// --- Preview render size ---------------------------------------------------
+//
+// The exported size (up to 3840x2160) is only needed pixel-for-pixel for
+// two things that read exact output pixels: grain (drawn in output
+// pixels, gl_FragCoord — see CLAUDE.md) and exports/thumbnails, which
+// each set their own canvas size directly around their own render call.
+// The live preview itself is shown shrunk to a few hundred px on screen,
+// so rendering the full export size every frame wastes GPU time for no
+// visible gain. With grain off, the render buffer is instead sized to
+// the canvas's actual on-screen footprint — CSS size x devicePixelRatio
+// x the root `zoom` boot.js applies — capped at the export size, with the
+// export's aspect ratio preserved to the pixel (so u_resolution, which
+// the shader derives uv from, always has the same aspect as the export).
+// With grain on, it's the full export size, same as before, so grain's
+// per-output-pixel cell size and jitter look exactly as they will in the
+// exported file.
+//
+// Recomputed only when the canvas's box resizes, the export size changes
+// (applyResolution) or grain is toggled — never per frame off a
+// getBoundingClientRect() call.
+
+function currentZoom() {
+  const z = parseFloat(document.documentElement.style.zoom);
+  return Number.isFinite(z) && z > 0 ? z : 1;
+}
+
+// "Contain"-fits state.width:state.height into the canvas's box, in the
+// box's own (pre-zoom) CSS pixel space — same space canvas.offsetWidth
+// and friends already use elsewhere in this file.
+function previewCssFitSize() {
+  const box = canvas.parentElement;
+  const boxW = box.clientWidth;
+  const boxH = box.clientHeight;
+  if (!boxW || !boxH || !state.width || !state.height) {
+    return { cssW: state.width || 1, cssH: state.height || 1 };
+  }
+  const scale = Math.min(boxW / state.width, boxH / state.height);
+  return { cssW: state.width * scale, cssH: state.height * scale };
+}
+
+function computePreviewRenderSize() {
+  const { cssW, cssH } = previewCssFitSize();
+  if (state.grainEnabled) {
+    return { w: state.width, h: state.height, cssW, cssH };
+  }
+  const factor = (window.devicePixelRatio || 1) * currentZoom();
+  const w = Math.min(state.width, Math.max(1, Math.round(cssW * factor)));
+  // Derived from the (possibly capped) w, not rounded independently, so
+  // the buffer's aspect always matches the export's to the pixel.
+  const h = Math.min(state.height, Math.max(1, Math.round((w * state.height) / state.width)));
+  return { w, h, cssW, cssH };
+}
+
+let previewRenderSize = { w: state.width, h: state.height, cssW: state.width, cssH: state.height };
+
+function refreshPreviewRenderSize() {
+  previewRenderSize = computePreviewRenderSize();
+  canvas.style.width = `${previewRenderSize.cssW}px`;
+  canvas.style.height = `${previewRenderSize.cssH}px`;
+}
+
+refreshPreviewRenderSize();
+
+// The box's own size drives the fit; resizing the canvas itself (done
+// above, and by exports/thumbnails setting canvas.width/height directly)
+// must not re-trigger this or it'd fight exports over the buffer size —
+// only the box is observed here. Changing canvas.style.width/height does
+// resize the canvas element itself, which is exactly what the separate
+// radiusObserver below (observing `canvas`) is for, so corner handles
+// stay put without an explicit call here.
+const previewSizeObserver = new ResizeObserver(refreshPreviewRenderSize);
+previewSizeObserver.observe(canvas.parentElement);
+
+// --- Preview corner radius ------------------------------------------------
+//
+// Drag any corner handle toward the centre to round the preview's corners
+// (the exported file stays a full rectangle — see CLAUDE.md). Positions
+// are measured with getBoundingClientRect() and turned into a fraction of
+// the short side, so the root CSS zoom set by boot.js cancels out.
+
+const radiusHandles = [...document.querySelectorAll('.radius-handle')];
+const MAX_PREVIEW_RADIUS = 0.5;
+// Handles never sit closer than this to the edges, so they stay grabbable
+// at radius 0 (layout px, like the offsets they're added to).
+const HANDLE_MIN_INSET = 12;
+
+function applyPreviewRadius() {
+  const short = Math.min(canvas.offsetWidth, canvas.offsetHeight);
+  const radiusPx = state.previewRadius * short;
+  canvas.style.borderRadius = `${radiusPx}px`;
+  const inset = Math.max(radiusPx * (1 - Math.SQRT1_2), HANDLE_MIN_INSET);
+  const { offsetLeft: x, offsetTop: y, offsetWidth: w, offsetHeight: h } = canvas;
+  radiusHandles.forEach((handle) => {
+    const { corner } = handle.dataset;
+    handle.style.left = `${corner[1] === 'l' ? x + inset : x + w - inset}px`;
+    handle.style.top = `${corner[0] === 't' ? y + inset : y + h - inset}px`;
+  });
+  const percent = Math.round((state.previewRadius / MAX_PREVIEW_RADIUS) * 100);
+  radiusHandles[0].setAttribute('aria-valuenow', String(percent));
+  radiusHandles[0].setAttribute('aria-valuetext', `${Math.round(radiusPx)} px`);
+}
+
+function setPreviewRadius(value) {
+  state.previewRadius = Math.min(MAX_PREVIEW_RADIUS, Math.max(0, value));
+  applyPreviewRadius();
+}
+
+radiusHandles[0].setAttribute('aria-valuemin', '0');
+radiusHandles[0].setAttribute('aria-valuemax', '100');
+
+// How far a pointer is in from the handle's corner, along the diagonal.
+function inwardDistance(e, corner, rect) {
+  const dx = corner[1] === 'l' ? e.clientX - rect.left : rect.right - e.clientX;
+  const dy = corner[0] === 't' ? e.clientY - rect.top : rect.bottom - e.clientY;
+  return (dx + dy) / 2;
+}
+
+for (const handle of radiusHandles) {
+  handle.title = 'Потяните к центру — скругление углов превью. Двойной клик — по умолчанию';
+  let drag = null;
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('is-dragging');
+    const rect = canvas.getBoundingClientRect();
+    drag = { start: inwardDistance(e, handle.dataset.corner, rect), radius: state.previewRadius };
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    // Relative to where the drag started: the handle is clamped to
+    // HANDLE_MIN_INSET at small radii, so an absolute mapping would jump.
+    // It rides the corner arc's midpoint, r·(1 − 1/√2) in from each edge,
+    // hence the division.
+    const rect = canvas.getBoundingClientRect();
+    const delta = inwardDistance(e, handle.dataset.corner, rect) - drag.start;
+    setPreviewRadius(drag.radius + delta / (1 - Math.SQRT1_2) / Math.min(rect.width, rect.height));
+  });
+  const endDrag = () => {
+    drag = null;
+    handle.classList.remove('is-dragging');
+    scheduleSave();
+  };
+  handle.addEventListener('pointerup', endDrag);
+  handle.addEventListener('pointercancel', endDrag);
+  handle.addEventListener('dblclick', () => {
+    setPreviewRadius(DEFAULTS.previewRadius);
+    scheduleSave();
+  });
+}
+
+radiusHandles[0].addEventListener('keydown', (e) => {
+  const step = e.shiftKey ? 0.05 : 0.01;
+  const next = {
+    ArrowUp: state.previewRadius + step,
+    ArrowRight: state.previewRadius + step,
+    ArrowDown: state.previewRadius - step,
+    ArrowLeft: state.previewRadius - step,
+    Home: 0,
+    End: MAX_PREVIEW_RADIUS,
+  }[e.key];
+  if (next === undefined) return;
+  e.preventDefault();
+  setPreviewRadius(next);
+  scheduleSave();
+});
+
+// The canvas's displayed size follows the window and the export size.
+// The box too: its canvas can move without resizing (letterboxing).
+const radiusObserver = new ResizeObserver(applyPreviewRadius);
+radiusObserver.observe(canvas);
+radiusObserver.observe(canvas.parentElement);
+
 const previewStart = performance.now();
 function previewLoop(now) {
   if (!exporting) {
+    syncActivePattern();
     const signature = patternSignature();
     if (signature !== lastPatternSignature && now - lastPatternThumbRender > THUMB_THROTTLE_MS) {
       lastPatternSignature = signature;
@@ -727,7 +1146,7 @@ function previewLoop(now) {
     }
     const elapsedSec = (now - previewStart) / 1000;
     const phase = (elapsedSec % state.duration) / state.duration;
-    renderer.setSize(state.width, state.height);
+    renderer.setSize(previewRenderSize.w, previewRenderSize.h);
     renderer.render(currentParams(), phase);
   }
   requestAnimationFrame(previewLoop);
@@ -736,15 +1155,48 @@ requestAnimationFrame(previewLoop);
 
 // --- Export --------------------------------------------------------------
 
+// Blocked while exporting: an export runs off a snapshot (see below), so
+// these panels changing mid-export can't corrupt the output any more —
+// this is purely so the user isn't left editing controls that visibly do
+// nothing. #exportBtn/#exportProgress (with #cancelExportBtn) sit outside
+// all three, so the export/cancel controls stay reachable. The preview's
+// corner-radius handles are preview-only and are left alone.
+const inertPanels = [
+  document.querySelector('.controls'),
+  document.querySelector('.pattern-bar'),
+  el.exportProgress.closest('.output').querySelector('.output-settings'),
+].filter(Boolean);
+
 function setBusy(busy) {
   exporting = busy;
+  // Captured before anything below moves focus (hiding #exportProgress
+  // blurs an element inside it back to <body>), so this reflects where
+  // focus actually was going into the transition.
+  const activeBefore = document.activeElement;
   el.exportBtn.disabled = busy;
-  el.format.disabled = busy;
+  // #format lives inside .output-settings, one of inertPanels below, so
+  // it's already unreachable while busy — no separate .disabled needed.
   el.exportProgress.hidden = !busy;
+  inertPanels.forEach((panel) => panel.toggleAttribute('inert', busy));
   if (busy) {
     el.statusLine.hidden = true;
+    el.cancelExportBtn.focus({ preventScroll: true });
   } else {
     el.progressFill.style.width = '0%';
+    if (reloadAfterExport) {
+      location.reload();
+      return;
+    }
+    // Move focus off whatever just got hidden/disabled (the cancel
+    // button, or nothing/body if it never had focus) back onto the
+    // export button, instead of silently dropping it to <body>.
+    if (
+      activeBefore === document.body ||
+      activeBefore === el.exportBtn ||
+      el.exportProgress.contains(activeBefore)
+    ) {
+      el.exportBtn.focus({ preventScroll: true });
+    }
   }
 }
 
@@ -804,10 +1256,44 @@ function renderResult({ id, name, blob, isVideo, width, height, batch }) {
   // WebM and MP4 of one export share a name and thumbnail, so say which is which.
   const ext = name.slice(name.lastIndexOf('.') + 1);
   link.textContent = `Скачать ${FORMAT_LABELS[ext] ?? ext.toUpperCase()}`;
+  const htmlBtn = node.querySelector('.result-html-btn');
+  if (isVideo) {
+    htmlBtn.hidden = false;
+    htmlBtn.addEventListener('click', () => copyResultHtml(node, htmlBtn));
+  }
   el.results.prepend(node);
   el.gallery.hidden = false;
   latestBatch = Math.max(latestBatch, batch);
   return node;
+}
+
+// Builds a <video> snippet for this card's export batch (WebM/MP4/poster
+// PNG, whichever files that batch produced — batch cards, including ones
+// restored from IndexedDB, all carry the same data-batch) and copies it
+// to the clipboard.
+async function copyResultHtml(card, btn) {
+  const batch = card.dataset.batch;
+  const names = [...el.results.querySelectorAll(`.result-card[data-batch="${batch}"]`)]
+    .map((c) => c.querySelector('.result-download').download);
+  const webm = names.find((n) => n.endsWith('.webm'));
+  const mp4 = names.find((n) => n.endsWith('.mp4'));
+  const png = names.find((n) => n.endsWith('.png'));
+  const sources = [];
+  if (webm) sources.push(`  <source src="${webm}" type="video/webm">`);
+  if (mp4) sources.push(`  <source src="${mp4}" type="video/mp4">`);
+  const posterAttr = png ? ` poster="${png}"` : '';
+  const html = `<video autoplay muted loop playsinline${posterAttr}>\n${sources.join('\n')}\n</video>`;
+  try {
+    await navigator.clipboard.writeText(html);
+    const original = btn.textContent;
+    btn.textContent = 'Скопировано';
+    setTimeout(() => {
+      btn.textContent = original;
+    }, 1500);
+  } catch (err) {
+    console.warn(err);
+    showStatus('Не удалось скопировать HTML — скопируйте вручную из буфера обмена браузера.', 'error');
+  }
 }
 
 function removeCard(card) {
@@ -874,78 +1360,163 @@ el.results.addEventListener('wheel', (e) => {
 }, { passive: false });
 window.addEventListener('resize', updateGalleryFade);
 
-const renderFrame = (phase) => renderer.render(currentParams(), phase);
+// The state keys an export run depends on. Snapshotted once per export
+// click (see the click handler below) so a slider/color/pattern change
+// mid-export can never leak into a frame: every exporter, and every
+// renderFrame callback it drives, reads only this snapshot — never the
+// live `state` — from the moment the click is handled onward.
+const EXPORT_STATE_KEYS = [
+  'colors', 'scale', 'warp', 'softness', 'speed', 'seed',
+  'grainEnabled', 'grainSize', 'grainDensity', 'grainOpacity',
+  'grainVariance', 'grainSoftness', 'grainBlend', 'grainColor',
+  'width', 'height', 'duration', 'fps', 'format', 'bitrate', 'gifWidth', 'poster',
+];
 
-async function exportOneVideo(container, stepLabel, batch) {
-  const { width, height, fps, duration } = state;
-  const bitrate = Math.round(state.bitrate * 1e6);
+function snapshotExportState() {
+  const picked = {};
+  for (const key of EXPORT_STATE_KEYS) picked[key] = state[key];
+  return structuredClone(picked);
+}
+
+async function exportOneVideo(snapshot, container, stepLabel, batch, signal) {
+  const { width, height, fps, duration } = snapshot;
+  const bitrate = Math.round(snapshot.bitrate * 1e6);
   const label = container === 'webm' ? 'WebM' : 'MP4';
   const onProgress = (p) => updateProgress(p, `${stepLabel}${label}… ${Math.round(p * 100)}%`);
+  const renderFrame = (phase) => renderer.render(buildParams(snapshot, fps), phase);
   renderer.setSize(width, height);
-  const blob =
-    container === 'webm' && !state.removeAlpha
-      ? await exportWebm({ canvas, renderFrame, fps, duration, bitrate, onProgress })
-      : await exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress });
+  const blob = await exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress, signal });
   const name = `liquid-gradient-${width}x${height}.${container}`;
   addResult({ name, blob, isVideo: true, width, height, batch });
   return `${name} (${formatBytes(blob.size)})`;
 }
 
-async function exportGifFile(batch) {
-  const { width, height } = gifSize();
-  const fps = Math.min(state.fps, 30);
+// Renders the same snapshot at phase 0 (the exported loop's first frame)
+// at the export size and saves it as a PNG poster — for the <video
+// poster="..."> attribute. Reuses the WebGL canvas right after a video
+// export's own renders, so it must run before setBusy(false) restores the
+// preview loop. The canvas context is created with preserveDrawingBuffer
+// (LiquidGradientRenderer.js), so render() then toBlob() back-to-back,
+// with nothing else touching the canvas in between, always reads the
+// frame that was just drawn.
+async function exportPosterFile(snapshot, batch, signal) {
+  signal.throwIfAborted();
+  const { width, height, fps } = snapshot;
+  renderer.setSize(width, height);
+  renderer.render(buildParams(snapshot, fps), 0);
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Не удалось создать PNG'))), 'image/png');
+  });
+  const name = `liquid-gradient-${width}x${height}.png`;
+  addResult({ name, blob, isVideo: false, width, height, batch });
+  return `${name} (${formatBytes(blob.size)})`;
+}
+
+async function exportGifFile(snapshot, batch, signal) {
+  const { width, height } = gifSize(snapshot);
+  const fps = Math.min(snapshot.fps, 30);
   renderer.setSize(width, height);
   const blob = await exportGif({
     canvas,
-    renderFrame: (phase) => renderer.render(currentParams(fps), phase),
+    renderFrame: (phase) => renderer.render(buildParams(snapshot, fps), phase),
     width,
     height,
     fps,
-    duration: state.duration,
+    duration: snapshot.duration,
     onProgress: (p, stage) => {
       const label = stage === 'render' ? 'Рендер кадров…' : 'Кодирование GIF…';
       updateProgress(p, `${label} ${Math.round(p * 100)}%`);
     },
+    signal,
   });
   const name = `liquid-gradient-${width}x${height}.gif`;
   addResult({ name, blob, isVideo: false, width, height, batch });
   return `${name} (${formatBytes(blob.size)})`;
 }
 
+// The controller behind #cancelExportBtn — created fresh per export run,
+// cleared once it's done so a stray click afterward is a no-op.
+let exportAbortController = null;
+
+function isAbortError(err) {
+  return err?.name === 'AbortError';
+}
+
 el.exportBtn.addEventListener('click', async () => {
+  const snapshot = snapshotExportState();
+  const controller = new AbortController();
+  exportAbortController = controller;
   setBusy(true);
   const batch = Date.now();
   const done = [];
   const failed = [];
+  let cancelled = false;
   try {
-    if (state.format === 'gif') {
+    if (snapshot.format === 'gif') {
       try {
-        done.push(await exportGifFile(batch));
+        done.push(await exportGifFile(snapshot, batch, controller.signal));
       } catch (err) {
-        console.error(err);
-        failed.push(`GIF: ${err.message}`);
+        if (isAbortError(err)) {
+          cancelled = true;
+        } else {
+          console.error(err);
+          failed.push(`GIF: ${err.message}`);
+        }
       }
     } else {
-      const containers = videoContainers();
+      const containers = videoContainers(snapshot.format);
+      let anyVideoSucceeded = false;
       for (const [i, container] of containers.entries()) {
+        if (cancelled) break;
         const step = containers.length > 1 ? `${i + 1}/${containers.length} · ` : '';
         try {
-          done.push(await exportOneVideo(container, step, batch));
+          done.push(await exportOneVideo(snapshot, container, step, batch, controller.signal));
+          anyVideoSucceeded = true;
         } catch (err) {
+          if (isAbortError(err)) {
+            // Cancelling mid-'webm+mp4' must not start the second file.
+            cancelled = true;
+            break;
+          }
           // One format failing (typically no H.264 encoder) must not throw
           // away the other one that already succeeded.
           console.error(err);
           failed.push(`${container.toUpperCase()}: ${err.message}`);
         }
       }
+      // A poster with no successful video behind it is pointless (e.g.
+      // 'mp4' with no H.264 encoder failing outright) — require at least
+      // one video to have actually finished, not just an empty `done`.
+      if (!cancelled && snapshot.poster && anyVideoSucceeded) {
+        try {
+          done.push(await exportPosterFile(snapshot, batch, controller.signal));
+        } catch (err) {
+          if (isAbortError(err)) {
+            cancelled = true;
+          } else {
+            console.error(err);
+            failed.push(`PNG: ${err.message}`);
+          }
+        }
+      }
     }
   } finally {
     setBusy(false);
+    exportAbortController = null;
+  }
+  if (cancelled) {
+    // Whatever file(s) had already finished stay in the gallery.
+    showStatus('Экспорт отменён.', 'cancelled');
+    return;
   }
   const parts = [];
   if (done.length) parts.push(`Готово: ${done.join(', ')}.`);
   if (failed.length) parts.push(`Не удалось — ${failed.join('; ')}.`);
   showStatus(parts.join(' '), failed.length ? 'error' : 'success');
+});
+
+el.cancelExportBtn.addEventListener('click', () => {
+  exportAbortController?.abort();
 });
 
 // --- Session ---------------------------------------------------------------
