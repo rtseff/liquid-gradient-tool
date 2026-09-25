@@ -129,7 +129,8 @@ function encoderConfig(container, { width, height, fps, bitrate }) {
     bitrate,
     framerate: fps,
     // Our frames are always opaque; 'discard' guarantees the file has no
-    // alpha plane (MediaRecorder in Chrome adds one to canvas captures).
+    // alpha plane (a VideoFrame captured from a canvas can otherwise
+    // carry one).
     alpha: 'discard',
     ...spec.extraConfig,
   };

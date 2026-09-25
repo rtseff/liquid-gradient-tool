@@ -107,8 +107,9 @@ for exactly that reason.
   Exported files: IndexedDB `liquid-gradient` › `results` (Blob + name,
   size, `batch`), capped at `MAX_SAVED_RESULTS` (30) — the oldest are
   deleted from both the DB and the gallery. `batch` is the export
-  click's timestamp; every card of the newest batch (WebM + MP4 = two
-  files) gets the "Последнее" badge. Storage errors only `console.warn`.
+  click's timestamp; every card of the newest batch (WebM + MP4 + PNG
+  poster = up to three files) gets the "Последнее" badge. Storage errors
+  only `console.warn`.
 - **Settings link** — "Скопировать ссылку на настройки" (below
   `#formatHint` in the export card) copies
   `location.origin + location.pathname + '#s=' + base64url(JSON)`, the

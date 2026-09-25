@@ -20,7 +20,9 @@ async function loadGifLibrary() {
 /**
  * Renders the seamless loop frame-by-frame at the given resolution and
  * encodes it into an animated GIF using gif.js. Frames are generated as
- * fast as the GPU allows (no real-time pacing needed, unlike WebM).
+ * fast as the GPU allows — no real-time pacing needed, since the GIF's
+ * own per-frame delays (not wall-clock timing during capture) set its
+ * playback speed.
  *
  * @param {object} opts
  * @param {HTMLCanvasElement} opts.canvas source canvas, must already be sized to width/height

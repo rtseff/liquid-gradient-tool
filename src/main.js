@@ -106,7 +106,21 @@ let pendingLinkStatus = null;
 const settingsLinkMatch = location.hash.match(/(?:^|[&#])s=([^&]*)/);
 if (settingsLinkMatch) {
   try {
-    const imported = validateSettings(JSON.parse(decodeSettingsLink(settingsLinkMatch[1])));
+    const validated = validateSettings(JSON.parse(decodeSettingsLink(settingsLinkMatch[1])));
+    // Mirror LINK_EXCLUDED_SETTINGS on the way in, not just the way out —
+    // a hand-built or older link could still carry patternHistory/
+    // previewRadius, and those are personal/preview-only, never something
+    // a link recipient should inherit.
+    const imported = {};
+    for (const [key, value] of Object.entries(validated)) {
+      if (!LINK_EXCLUDED_SETTINGS.has(key)) imported[key] = value;
+    }
+    if (Object.keys(imported).length === 0) {
+      // Nothing usable survived validation/filtering (e.g. `{}`, a
+      // wrong-shaped payload, or a link that only carried excluded keys)
+      // — treat it the same as a broken link rather than claiming success.
+      throw new Error('empty settings payload');
+    }
     Object.assign(state, imported);
     pendingLinkStatus = { message: 'Настройки из ссылки применены.', kind: 'success' };
   } catch (err) {
@@ -115,6 +129,15 @@ if (settingsLinkMatch) {
   }
   history.replaceState(null, '', location.pathname + location.search);
 }
+
+// Pasting a settings link into an *already open* tab only changes the
+// hash — no navigation happens, so none of the import logic above (which
+// only runs once, at module load) would ever see it. Reloading re-runs
+// this module from scratch, which picks the new `#s=` up like any other
+// page load.
+window.addEventListener('hashchange', () => {
+  if (/(?:^|[&#])s=([^&]*)/.test(location.hash)) location.reload();
+});
 
 function seedsEqual(a, b) {
   return a[0] === b[0] && a[1] === b[1];
@@ -1103,14 +1126,30 @@ const inertPanels = [
 
 function setBusy(busy) {
   exporting = busy;
+  // Captured before anything below moves focus (hiding #exportProgress
+  // blurs an element inside it back to <body>), so this reflects where
+  // focus actually was going into the transition.
+  const activeBefore = document.activeElement;
   el.exportBtn.disabled = busy;
-  el.format.disabled = busy;
+  // #format lives inside .output-settings, one of inertPanels below, so
+  // it's already unreachable while busy — no separate .disabled needed.
   el.exportProgress.hidden = !busy;
   inertPanels.forEach((panel) => panel.toggleAttribute('inert', busy));
   if (busy) {
     el.statusLine.hidden = true;
+    el.cancelExportBtn.focus();
   } else {
     el.progressFill.style.width = '0%';
+    // Move focus off whatever just got hidden/disabled (the cancel
+    // button, or nothing/body if it never had focus) back onto the
+    // export button, instead of silently dropping it to <body>.
+    if (
+      activeBefore === document.body ||
+      activeBefore === el.exportBtn ||
+      el.exportProgress.contains(activeBefore)
+    ) {
+      el.exportBtn.focus();
+    }
   }
 }
 
@@ -1314,7 +1353,7 @@ async function exportOneVideo(snapshot, container, stepLabel, batch, signal) {
 // with nothing else touching the canvas in between, always reads the
 // frame that was just drawn.
 async function exportPosterFile(snapshot, batch, signal) {
-  if (signal.aborted) throw new DOMException('Экспорт отменён.', 'AbortError');
+  signal.throwIfAborted();
   const { width, height, fps } = snapshot;
   renderer.setSize(width, height);
   renderer.render(buildParams(snapshot, fps), 0);
@@ -1353,7 +1392,7 @@ async function exportGifFile(snapshot, batch, signal) {
 let exportAbortController = null;
 
 function isAbortError(err) {
-  return err instanceof DOMException ? err.name === 'AbortError' : err?.name === 'AbortError';
+  return err?.name === 'AbortError';
 }
 
 el.exportBtn.addEventListener('click', async () => {
@@ -1379,11 +1418,13 @@ el.exportBtn.addEventListener('click', async () => {
       }
     } else {
       const containers = videoContainers(snapshot.format);
+      let anyVideoSucceeded = false;
       for (const [i, container] of containers.entries()) {
         if (cancelled) break;
         const step = containers.length > 1 ? `${i + 1}/${containers.length} · ` : '';
         try {
           done.push(await exportOneVideo(snapshot, container, step, batch, controller.signal));
+          anyVideoSucceeded = true;
         } catch (err) {
           if (isAbortError(err)) {
             // Cancelling mid-'webm+mp4' must not start the second file.
@@ -1396,7 +1437,10 @@ el.exportBtn.addEventListener('click', async () => {
           failed.push(`${container.toUpperCase()}: ${err.message}`);
         }
       }
-      if (!cancelled && snapshot.poster) {
+      // A poster with no successful video behind it is pointless (e.g.
+      // 'mp4' with no H.264 encoder failing outright) — require at least
+      // one video to have actually finished, not just an empty `done`.
+      if (!cancelled && snapshot.poster && anyVideoSucceeded) {
         try {
           done.push(await exportPosterFile(snapshot, batch, controller.signal));
         } catch (err) {

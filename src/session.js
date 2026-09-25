@@ -31,9 +31,16 @@ const isSeed = (v) => Array.isArray(v) && v.length === 2 && v.every(numberIn(-1e
 // state.seed) takes over.
 // pinned is optional: absent (or not present at all) means "not pinned",
 // so old saved histories from before pinning existed still validate.
+// Pinning is capped at MAX_PATTERN_HISTORY - 1 in main.js (one slot short
+// of the strip so a freshly generated pattern always has somewhere to
+// land) — a saved history with more pinned entries than that could only
+// come from a version whose cap was raised or from tampering, and
+// pushPatternHistory() assumes at least one unpinned entry always exists,
+// so such a history is rejected wholesale rather than partially trusted.
 const isPatternHistory = (v) =>
   Array.isArray(v) &&
   v.length <= MAX_PATTERN_HISTORY &&
+  v.filter((item) => item && item.pinned).length <= MAX_PATTERN_HISTORY - 1 &&
   v.every(
     (item) =>
       item &&
