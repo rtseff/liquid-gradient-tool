@@ -135,8 +135,13 @@ if (settingsLinkMatch) {
 // only runs once, at module load) would ever see it. Reloading re-runs
 // this module from scratch, which picks the new `#s=` up like any other
 // page load.
+// A link pasted while an export runs waits for it to finish (setBusy)
+// instead of silently killing it with a reload.
+let reloadAfterExport = false;
 window.addEventListener('hashchange', () => {
-  if (/(?:^|[&#])s=([^&]*)/.test(location.hash)) location.reload();
+  if (!/(?:^|[&#])s=([^&]*)/.test(location.hash)) return;
+  if (exporting) reloadAfterExport = true;
+  else location.reload();
 });
 
 function seedsEqual(a, b) {
@@ -1137,9 +1142,13 @@ function setBusy(busy) {
   inertPanels.forEach((panel) => panel.toggleAttribute('inert', busy));
   if (busy) {
     el.statusLine.hidden = true;
-    el.cancelExportBtn.focus();
+    el.cancelExportBtn.focus({ preventScroll: true });
   } else {
     el.progressFill.style.width = '0%';
+    if (reloadAfterExport) {
+      location.reload();
+      return;
+    }
     // Move focus off whatever just got hidden/disabled (the cancel
     // button, or nothing/body if it never had focus) back onto the
     // export button, instead of silently dropping it to <body>.
@@ -1148,7 +1157,7 @@ function setBusy(busy) {
       activeBefore === el.exportBtn ||
       el.exportProgress.contains(activeBefore)
     ) {
-      el.exportBtn.focus();
+      el.exportBtn.focus({ preventScroll: true });
     }
   }
 }

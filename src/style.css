@@ -837,6 +837,9 @@ select option {
   padding: 0;
   border: none;
   background: none;
+  /* Own stacking context, so the ::before disc (z-index: -1) stays
+     between the thumbnail and the glyph instead of behind the thumbnail. */
+  z-index: 1;
   color: var(--text);
   font-size: 12px;
   line-height: 1;

@@ -127,6 +127,10 @@ for exactly that reason.
   way `history.replaceState()` strips the hash immediately so a reload
   doesn't reapply it, and a successful import is saved right away with
   `saveSettings()` since it didn't come from a user event.
+  Import also drops `LINK_EXCLUDED_SETTINGS`, and a link with nothing
+  valid left reports an error. The import code runs once at module load,
+  so a `#s=` pasted into an already-open tab triggers a `hashchange` →
+  `location.reload()` (deferred to the end of a running export).
 - **Pattern history** (`#patternHistory` in `.pattern-bar` at the bottom
   of `.canvas-wrap`, right of the "↻ Новый узор" button, which drops its
   text below a 460px-wide preview; **N** — `e.code === 'KeyN'`, so it
@@ -145,7 +149,10 @@ for exactly that reason.
   Pinning is capped at `MAX_PINNED_PATTERNS` (`MAX_PATTERN_HISTORY − 1`
   = 4) — one slot short of the cap, so a freshly generated pattern
   always has somewhere to land; past the cap, other entries' pin buttons
-  go `disabled`. On load the current
+  go `disabled`. `isPatternHistory` rejects a saved history with more
+  than 4 pins. `.pattern-pin` is a 24×24 hit target (WCAG 2.2 target
+  size) with a smaller visible disc drawn by `::before` at `z-index: -1`;
+  the button's own `z-index: 1` keeps that disc above the thumbnail. On load the current
   seed is added if missing, so the strip is never empty. Labels: a
   bare age on screen ("42 с", "3 мин", fits 48px items), the full
   `Intl.RelativeTimeFormat('ru')` phrase in title/aria-label; refreshed
@@ -196,7 +203,9 @@ for exactly that reason.
   of this is left silently doing nothing — `#exportBtn`/`#exportProgress`
   (which holds `#cancelExportBtn`) sit outside all three and stay
   reachable; the preview's corner-radius handles are preview-only and
-  are deliberately left alone.
+  are deliberately left alone. `setBusy()` also moves focus to `#cancelExportBtn` on
+  start and back to `#exportBtn` at the end (only if focus was on the
+  export controls or `<body>`), both with `preventScroll`.
 - **Cancelling an export** goes through a plain `AbortController` created
   fresh per export click and stored so `#cancelExportBtn` can call
   `.abort()` on it. `exportVideo`/`exportGif` take a `signal` and check
