@@ -1,5 +1,4 @@
 import { LiquidGradientRenderer } from './render/LiquidGradientRenderer.js';
-import { exportWebm } from './export/exportWebm.js';
 import { exportVideo } from './export/exportVideo.js';
 import { exportGif } from './export/exportGif.js';
 import { PRESETS, presetGradientCss } from './presets.js';
@@ -46,7 +45,6 @@ const state = {
   fps: 30,
   format: 'webm+mp4', // 'webm+mp4' | 'webm' | 'mp4' | 'gif'
   bitrate: 1.5, // Mbit/s
-  removeAlpha: true,
   gifWidth: 480,
 };
 
@@ -111,9 +109,9 @@ function speedToAmplitude(rawSpeed) {
   return rawSpeed ** 3;
 }
 
-function gifSize() {
-  const width = Math.min(state.gifWidth, state.width);
-  return { width, height: Math.round((width * state.height) / state.width) };
+function gifSize(source = state) {
+  const width = Math.min(source.gifWidth, source.width);
+  return { width, height: Math.round((width * source.height) / source.width) };
 }
 
 // --- DOM refs -------------------------------------------------------------
@@ -163,8 +161,6 @@ const el = {
   bitrateField: document.getElementById('bitrateField'),
   bitrate: document.getElementById('bitrate'),
   bitrateOut: document.getElementById('bitrateOut'),
-  alphaField: document.getElementById('alphaField'),
-  removeAlpha: document.getElementById('removeAlpha'),
   gifWidthField: document.getElementById('gifWidthField'),
   gifWidth: document.getElementById('gifWidth'),
   gifWidthOut: document.getElementById('gifWidthOut'),
@@ -175,6 +171,7 @@ const el = {
   exportProgress: document.getElementById('exportProgress'),
   progressFill: document.getElementById('progressFill'),
   progressLabel: document.getElementById('progressLabel'),
+  cancelExportBtn: document.getElementById('cancelExportBtn'),
   statusLine: document.getElementById('statusLine'),
   gallery: document.getElementById('gallery'),
   galleryScroll: document.querySelector('.gallery-scroll'),
@@ -561,8 +558,8 @@ el.grainColorReset.addEventListener('click', () => {
 
 // --- Output settings --------------------------------------------------------
 
-function videoContainers() {
-  return { 'webm+mp4': ['webm', 'mp4'], webm: ['webm'], mp4: ['mp4'], gif: [] }[state.format];
+function videoContainers(format = state.format) {
+  return { 'webm+mp4': ['webm', 'mp4'], webm: ['webm'], mp4: ['mp4'], gif: [] }[format];
 }
 
 function updateOutputMeta() {
@@ -570,7 +567,6 @@ function updateOutputMeta() {
   const isGif = state.format === 'gif';
   el.bitrateField.hidden = isGif;
   el.gifWidthField.hidden = !isGif;
-  el.alphaField.hidden = !containers.includes('webm');
 
   el.exportLabel.textContent = `Экспорт ${FORMAT_LABELS[state.format]}`;
   const seconds = `${state.duration.toFixed(1)} с`;
@@ -586,22 +582,12 @@ function updateOutputMeta() {
       `${state.width}×${state.height} - ${seconds} - ${state.fps} fps - ~${formatBytes(approxBytes)}${perFile}`;
   }
 
-  let hint = FORMAT_HINTS[state.format];
-  if (containers.includes('webm') && !state.removeAlpha) {
-    hint += ' WebM с альфа-каналом записывается в реальном времени.';
-  }
-  el.formatHint.textContent = hint;
+  el.formatHint.textContent = FORMAT_HINTS[state.format];
 }
 
 el.format.value = state.format;
 el.format.addEventListener('change', () => {
   state.format = el.format.value;
-  updateOutputMeta();
-});
-
-el.removeAlpha.checked = state.removeAlpha;
-el.removeAlpha.addEventListener('change', () => {
-  state.removeAlpha = el.removeAlpha.checked;
   updateOutputMeta();
 });
 
@@ -647,31 +633,38 @@ updateOutputMeta();
 
 // Frames in one loop, computed exactly like the exporters do, so the
 // grain re-rolls once per exported frame. GIF passes its own (≤ 30) fps.
-function loopFrames(fps) {
-  return Math.max(1, Math.round(fps * state.duration));
+function loopFrames(fps, duration) {
+  return Math.max(1, Math.round(fps * duration));
+}
+
+// Builds shader-ready params from any state-shaped object — the live
+// `state` for the preview/thumbnails, or an export snapshot (see
+// "Export" below) so a frame mid-export never reads the live state.
+function buildParams(source, fps) {
+  return {
+    colors: source.colors,
+    scale: source.scale,
+    warp: source.warp,
+    softness: source.softness,
+    loops: 1,
+    speed: speedToAmplitude(source.speed),
+    seed: source.seed,
+    grain: {
+      enabled: source.grainEnabled,
+      size: source.grainSize,
+      density: source.grainDensity,
+      opacity: source.grainOpacity,
+      variance: source.grainVariance,
+      softness: source.grainSoftness,
+      blend: source.grainBlend,
+      color: source.grainColor,
+      frames: loopFrames(fps, source.duration),
+    },
+  };
 }
 
 function currentParams(fps = state.fps) {
-  return {
-    colors: state.colors,
-    scale: state.scale,
-    warp: state.warp,
-    softness: state.softness,
-    loops: 1,
-    speed: speedToAmplitude(state.speed),
-    seed: state.seed,
-    grain: {
-      enabled: state.grainEnabled,
-      size: state.grainSize,
-      density: state.grainDensity,
-      opacity: state.grainOpacity,
-      variance: state.grainVariance,
-      softness: state.grainSoftness,
-      blend: state.grainBlend,
-      color: state.grainColor,
-      frames: loopFrames(fps),
-    },
-  };
+  return buildParams(state, fps);
 }
 
 // Pattern-history thumbnails share the one WebGL canvas with the live
@@ -838,11 +831,24 @@ requestAnimationFrame(previewLoop);
 
 // --- Export --------------------------------------------------------------
 
+// Blocked while exporting: an export runs off a snapshot (see below), so
+// these panels changing mid-export can't corrupt the output any more —
+// this is purely so the user isn't left editing controls that visibly do
+// nothing. #exportBtn/#exportProgress (with #cancelExportBtn) sit outside
+// all three, so the export/cancel controls stay reachable. The preview's
+// corner-radius handles are preview-only and are left alone.
+const inertPanels = [
+  document.querySelector('.controls'),
+  document.querySelector('.pattern-bar'),
+  el.exportProgress.closest('.output').querySelector('.output-settings'),
+].filter(Boolean);
+
 function setBusy(busy) {
   exporting = busy;
   el.exportBtn.disabled = busy;
   el.format.disabled = busy;
   el.exportProgress.hidden = !busy;
+  inertPanels.forEach((panel) => panel.toggleAttribute('inert', busy));
   if (busy) {
     el.statusLine.hidden = true;
   } else {
@@ -976,64 +982,101 @@ el.results.addEventListener('wheel', (e) => {
 }, { passive: false });
 window.addEventListener('resize', updateGalleryFade);
 
-const renderFrame = (phase) => renderer.render(currentParams(), phase);
+// The state keys an export run depends on. Snapshotted once per export
+// click (see the click handler below) so a slider/color/pattern change
+// mid-export can never leak into a frame: every exporter, and every
+// renderFrame callback it drives, reads only this snapshot — never the
+// live `state` — from the moment the click is handled onward.
+const EXPORT_STATE_KEYS = [
+  'colors', 'scale', 'warp', 'softness', 'speed', 'seed',
+  'grainEnabled', 'grainSize', 'grainDensity', 'grainOpacity',
+  'grainVariance', 'grainSoftness', 'grainBlend', 'grainColor',
+  'width', 'height', 'duration', 'fps', 'format', 'bitrate', 'gifWidth',
+];
 
-async function exportOneVideo(container, stepLabel, batch) {
-  const { width, height, fps, duration } = state;
-  const bitrate = Math.round(state.bitrate * 1e6);
+function snapshotExportState() {
+  const picked = {};
+  for (const key of EXPORT_STATE_KEYS) picked[key] = state[key];
+  return structuredClone(picked);
+}
+
+async function exportOneVideo(snapshot, container, stepLabel, batch, signal) {
+  const { width, height, fps, duration } = snapshot;
+  const bitrate = Math.round(snapshot.bitrate * 1e6);
   const label = container === 'webm' ? 'WebM' : 'MP4';
   const onProgress = (p) => updateProgress(p, `${stepLabel}${label}… ${Math.round(p * 100)}%`);
+  const renderFrame = (phase) => renderer.render(buildParams(snapshot, fps), phase);
   renderer.setSize(width, height);
-  const blob =
-    container === 'webm' && !state.removeAlpha
-      ? await exportWebm({ canvas, renderFrame, fps, duration, bitrate, onProgress })
-      : await exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress });
+  const blob = await exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress, signal });
   const name = `liquid-gradient-${width}x${height}.${container}`;
   addResult({ name, blob, isVideo: true, width, height, batch });
   return `${name} (${formatBytes(blob.size)})`;
 }
 
-async function exportGifFile(batch) {
-  const { width, height } = gifSize();
-  const fps = Math.min(state.fps, 30);
+async function exportGifFile(snapshot, batch, signal) {
+  const { width, height } = gifSize(snapshot);
+  const fps = Math.min(snapshot.fps, 30);
   renderer.setSize(width, height);
   const blob = await exportGif({
     canvas,
-    renderFrame: (phase) => renderer.render(currentParams(fps), phase),
+    renderFrame: (phase) => renderer.render(buildParams(snapshot, fps), phase),
     width,
     height,
     fps,
-    duration: state.duration,
+    duration: snapshot.duration,
     onProgress: (p, stage) => {
       const label = stage === 'render' ? 'Рендер кадров…' : 'Кодирование GIF…';
       updateProgress(p, `${label} ${Math.round(p * 100)}%`);
     },
+    signal,
   });
   const name = `liquid-gradient-${width}x${height}.gif`;
   addResult({ name, blob, isVideo: false, width, height, batch });
   return `${name} (${formatBytes(blob.size)})`;
 }
 
+// The controller behind #cancelExportBtn — created fresh per export run,
+// cleared once it's done so a stray click afterward is a no-op.
+let exportAbortController = null;
+
+function isAbortError(err) {
+  return err instanceof DOMException ? err.name === 'AbortError' : err?.name === 'AbortError';
+}
+
 el.exportBtn.addEventListener('click', async () => {
+  const snapshot = snapshotExportState();
+  const controller = new AbortController();
+  exportAbortController = controller;
   setBusy(true);
   const batch = Date.now();
   const done = [];
   const failed = [];
+  let cancelled = false;
   try {
-    if (state.format === 'gif') {
+    if (snapshot.format === 'gif') {
       try {
-        done.push(await exportGifFile(batch));
+        done.push(await exportGifFile(snapshot, batch, controller.signal));
       } catch (err) {
-        console.error(err);
-        failed.push(`GIF: ${err.message}`);
+        if (isAbortError(err)) {
+          cancelled = true;
+        } else {
+          console.error(err);
+          failed.push(`GIF: ${err.message}`);
+        }
       }
     } else {
-      const containers = videoContainers();
+      const containers = videoContainers(snapshot.format);
       for (const [i, container] of containers.entries()) {
+        if (cancelled) break;
         const step = containers.length > 1 ? `${i + 1}/${containers.length} · ` : '';
         try {
-          done.push(await exportOneVideo(container, step, batch));
+          done.push(await exportOneVideo(snapshot, container, step, batch, controller.signal));
         } catch (err) {
+          if (isAbortError(err)) {
+            // Cancelling mid-'webm+mp4' must not start the second file.
+            cancelled = true;
+            break;
+          }
           // One format failing (typically no H.264 encoder) must not throw
           // away the other one that already succeeded.
           console.error(err);
@@ -1043,11 +1086,21 @@ el.exportBtn.addEventListener('click', async () => {
     }
   } finally {
     setBusy(false);
+    exportAbortController = null;
+  }
+  if (cancelled) {
+    // Whatever file(s) had already finished stay in the gallery.
+    showStatus('Экспорт отменён.', 'cancelled');
+    return;
   }
   const parts = [];
   if (done.length) parts.push(`Готово: ${done.join(', ')}.`);
   if (failed.length) parts.push(`Не удалось — ${failed.join('; ')}.`);
   showStatus(parts.join(' '), failed.length ? 'error' : 'success');
+});
+
+el.cancelExportBtn.addEventListener('click', () => {
+  exportAbortController?.abort();
 });
 
 // --- Session ---------------------------------------------------------------

@@ -64,7 +64,6 @@ const VALIDATORS = {
   fps: oneOf(24, 30, 60),
   format: oneOf('webm+mp4', 'webm', 'mp4', 'gif'),
   bitrate: numberIn(0.5, 10),
-  removeAlpha: (v) => typeof v === 'boolean',
   gifWidth: numberIn(240, 960),
 };
 

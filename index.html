@@ -206,14 +206,6 @@
             </select>
           </span>
         </label>
-
-        <div class="field" id="alphaField">
-          <span class="field-label">Альфа-канал</span>
-          <label class="checkbox-field">
-            <input id="removeAlpha" type="checkbox" checked />
-            <span>Убрать из WebM</span>
-          </label>
-        </div>
       </div>
 
       <button id="exportBtn" class="export-btn" type="button">
@@ -224,6 +216,7 @@
       <div id="exportProgress" class="progress" hidden>
         <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
         <span id="progressLabel"></span>
+        <button id="cancelExportBtn" type="button" class="cancel-export-btn">Отмена</button>
       </div>
       <p id="statusLine" class="status" role="status" hidden></p>
       <p id="formatHint" class="hint"></p>

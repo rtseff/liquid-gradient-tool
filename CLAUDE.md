@@ -133,33 +133,64 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
 - **`src/render/LiquidGradientRenderer.js`** — thin WebGL2 wrapper.
   Compiles/links the program once in the constructor; `render(params,
   phase)` sets all uniforms and issues one draw call. No textures.
-- **Exporters** all take a `renderFrame(phase)` callback (which just
-  calls `renderer.render(currentParams(), phase)`) and drive it
+- **Export never reads live `state`.** `el.exportBtn`'s click handler
+  takes one `structuredClone` snapshot of the export-relevant `state`
+  keys (`snapshotExportState()`, `EXPORT_STATE_KEYS` in `main.js`) before
+  starting anything, and every exporter — including its `renderFrame`
+  callback — is given that snapshot, never `state`. For `'webm+mp4'` both
+  files come from the same snapshot. This is what makes an export
+  immune to the user moving a slider, editing a color or picking a new
+  pattern while it runs: exporters take shader params via `buildParams
+  (source, fps)`, a `source`-agnostic version of what used to be
+  `currentParams()` (`currentParams(fps)` is now just
+  `buildParams(state, fps)`, still used by the live preview and pattern
+  thumbnails). Adding a new export-affecting control means adding its
+  key to both `EXPORT_STATE_KEYS` and `VALIDATORS` (session.js) — the
+  latter for persistence, the former so export snapshots it.
+  Controls are also made inert while exporting (`inertPanels` in
+  `setBusy()`: `.controls`, `.pattern-bar`, `.output-settings`) so none
+  of this is left silently doing nothing — `#exportBtn`/`#exportProgress`
+  (which holds `#cancelExportBtn`) sit outside all three and stay
+  reachable; the preview's corner-radius handles are preview-only and
+  are deliberately left alone.
+- **Cancelling an export** goes through a plain `AbortController` created
+  fresh per export click and stored so `#cancelExportBtn` can call
+  `.abort()` on it. `exportVideo`/`exportGif` take a `signal` and check
+  `signal.throwIfAborted()` between frames (and, for `exportVideo`, while
+  draining the encoder queue), so a cancellation surfaces as a normal
+  rejection with `err.name === 'AbortError'` — the click handler treats
+  that specially: no `console.error`, no entry in the failure list,
+  status becomes "Экспорт отменён." (`kind: 'cancelled'`, a dedicated,
+  non-red `.status[data-kind]` style), and for `'webm+mp4'` the loop
+  breaks instead of starting the second container. Whatever file(s) had
+  already finished stay in the gallery. `exportVideo.js` closes its
+  `VideoEncoder` exactly once via a small `closeEncoder()` guarded by a
+  `encoderClosed` flag in a `finally`, since `.close()` throws if called
+  twice and abort can land mid-loop before `flush()`/`close()` would
+  otherwise run. `exportGif.js` can't simply skip a step: once frame
+  rendering has finished, gif.js's own `render()`/worker pipeline is
+  already the only way to stop, so cancelling then calls the GIF's
+  `.abort()` (present in `vendor/gifjs/gif.js`) and the pending promise
+  rejects with the abort signal's reason.
+- **Exporters** all take a `renderFrame(phase)` callback and drive it
   frame-by-frame at exact `phase = i / totalFrames` steps. The UI has one
   export button; `state.format` is `'webm+mp4' | 'webm' | 'mp4' | 'gif'`
   and `'webm+mp4'` runs the two video exports sequentially, keeping the
   WebM even if MP4 fails (typically: no H.264 encoder).
-  - **`src/export/exportVideo.js`** — default path for WebM and MP4:
-    WebCodecs `VideoEncoder` (VP9 / H.264 High) with `bitrate` from the
-    UI and `alpha: 'discard'`, timestamps from the frame index (not the
-    clock), packed by the vendored muxers. Codec level strings are
-    computed from size × fps via the H.264 / VP9 level tables in that
-    file — encoders reject configs whose level is too low.
-    `videoSupportProblem()` probes `isConfigSupported` and distinguishes
-    "no encoder" from "unsupported size/fps".
+  - **`src/export/exportVideo.js`** — the only video path (WebM and
+    MP4 both): WebCodecs `VideoEncoder` (VP9 / H.264 High) with
+    `bitrate` from the UI and `alpha: 'discard'`, timestamps from the
+    frame index (not the clock), packed by the vendored muxers. Codec
+    level strings are computed from size × fps via the H.264 / VP9
+    level tables in that file — encoders reject configs whose level is
+    too low. `videoSupportProblem()` probes `isConfigSupported` and
+    distinguishes "no encoder" from "unsupported size/fps".
   - **webm-muxer writes the wrong duration**: it sets Segment › Info ›
     Duration to the *start* of the last frame (48 frames @ 24 fps →
     1.958 s), so players give the loop's last frame ~0 time.
     `setWebmDuration()` patches that EBML element after `finalize()`.
     mp4-muxer is fine (uses chunk durations). Verify both with a
     `<video>`'s `duration` after any muxer change.
-  - **`src/export/exportWebm.js`** — `MediaRecorder` path, used only
-    when "Убрать из WebM" (remove alpha) is unchecked: Chrome's
-    MediaRecorder writes VP9 with an alpha plane (`AlphaMode = 1`) for
-    canvas captures even though our pixels are opaque, and WebCodecs
-    here reports `alpha: 'keep'` for VP9 as unsupported. It stamps
-    frames by wall clock, so it paces against an absolute schedule and
-    still stretches the video if rendering is slower than real time.
   - **`src/export/exportGif.js`** — gif.js, renders as fast as possible
     with explicit per-frame delays.
 - **H.264 can't be tested in this sandbox**: the pre-installed Chromium
@@ -257,11 +288,13 @@ cell centres read as a visible grid).
 - **Animated, and still seamless.** The grain re-rolls every frame:
   `frame = mod(floor(u_phase * u_grainFrames + 0.5), u_grainFrames)` is
   the hash's z. `u_grainFrames` must equal the exporter's frame count
-  (`round(fps × duration)`), which `currentParams(fps)` computes via
-  `loopFrames()` — GIF passes its own capped fps, so don't render GIF
-  frames with the default `currentParams()`. The `mod` makes phase 1.0
-  frame 0 again (verified: phase 0 vs 1 bit-identical for all blend
-  modes); the `+ 0.5` stops `i / n * n` rounding down to `i − 1`.
+  (`round(fps × duration)`), which `buildParams(source, fps)` computes
+  via `loopFrames(fps, source.duration)` — GIF passes its own capped
+  fps (and, mid-export, the export snapshot's `duration`, not
+  `state.duration`), so don't render GIF frames with the default
+  `currentParams()`. The `mod` makes phase 1.0 frame 0 again (verified:
+  phase 0 vs 1 bit-identical for all blend modes); the `+ 0.5` stops
+  `i / n * n` rounding down to `i − 1`.
 - Randomness: Dave Hoskins' "Hash without Sine" (`hash13` / `hash23`,
   xy = cell, z = frame). Checked at size 1: changed-pixel share matched
   density (0.101 / 0.499 / 0.9 for 10 / 50 / 90%); variance 100% gives

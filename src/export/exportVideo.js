@@ -175,9 +175,10 @@ export async function videoSupportProblem(container, settings) {
  * @param {number} opts.duration seconds
  * @param {number} opts.bitrate bits per second
  * @param {(progress: number) => void} [opts.onProgress]
+ * @param {AbortSignal} [opts.signal] checked between frames; aborting rejects with an AbortError
  * @returns {Promise<Blob>}
  */
-export async function exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress }) {
+export async function exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress, signal }) {
   const problem = await videoSupportProblem(container, { width, height, fps, bitrate });
   if (problem) throw new Error(problem);
 
@@ -193,29 +194,47 @@ export async function exportVideo({ container, canvas, renderFrame, width, heigh
   });
   encoder.configure(encoderConfig(container, { width, height, fps, bitrate }));
 
+  // Closed exactly once, however the loop below exits (finished, error, or
+  // a caught abort) — VideoEncoder.close() throws if called twice.
+  let encoderClosed = false;
+  const closeEncoder = () => {
+    if (encoderClosed) return;
+    encoderClosed = true;
+    try {
+      encoder.close();
+    } catch {
+      // Already in a closed/errored state — nothing more to do.
+    }
+  };
+
   const totalFrames = Math.max(1, Math.round(fps * duration));
   const frameDurationUs = 1e6 / fps;
   const keyFrameEvery = Math.max(1, Math.round(fps * 2));
 
-  for (let i = 0; i < totalFrames; i++) {
-    if (encodeError) throw encodeError;
-    renderFrame(i / totalFrames);
-    const frame = new VideoFrame(canvas, {
-      timestamp: Math.round(i * frameDurationUs),
-      duration: Math.round(frameDurationUs),
-    });
-    encoder.encode(frame, { keyFrame: i % keyFrameEvery === 0 });
-    frame.close();
-    onProgress?.((i + 1) / totalFrames);
-    // Let the encoder drain and the progress bar repaint.
-    while (encoder.encodeQueueSize > 4) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
+  try {
+    for (let i = 0; i < totalFrames; i++) {
+      signal?.throwIfAborted();
+      if (encodeError) throw encodeError;
+      renderFrame(i / totalFrames);
+      const frame = new VideoFrame(canvas, {
+        timestamp: Math.round(i * frameDurationUs),
+        duration: Math.round(frameDurationUs),
+      });
+      encoder.encode(frame, { keyFrame: i % keyFrameEvery === 0 });
+      frame.close();
+      onProgress?.((i + 1) / totalFrames);
+      // Let the encoder drain and the progress bar repaint.
+      while (encoder.encodeQueueSize > 4) {
+        signal?.throwIfAborted();
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
 
-  await encoder.flush();
-  encoder.close();
+    await encoder.flush();
+  } finally {
+    closeEncoder();
+  }
   if (encodeError) throw encodeError;
   muxer.finalize();
   if (container === 'webm') {
