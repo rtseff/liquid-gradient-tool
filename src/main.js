@@ -316,7 +316,7 @@ el.copySettingsLinkBtn.addEventListener('click', () => copySettingsLink(el.copyS
 
 // Builds `#s=<base64url JSON>` from every persisted setting except
 // patternHistory/previewRadius (see LINK_EXCLUDED_SETTINGS) and copies
-// it to the clipboard — same "Скопировано" idiom as copyResultHtml().
+// it to the clipboard; the button reads "Скопировано" for 1.5 s.
 async function copySettingsLink(btn) {
   const data = {};
   for (const key of SETTINGS_KEYS) {
@@ -1256,44 +1256,10 @@ function renderResult({ id, name, blob, isVideo, width, height, batch }) {
   // WebM and MP4 of one export share a name and thumbnail, so say which is which.
   const ext = name.slice(name.lastIndexOf('.') + 1);
   link.textContent = `Скачать ${FORMAT_LABELS[ext] ?? ext.toUpperCase()}`;
-  const htmlBtn = node.querySelector('.result-html-btn');
-  if (isVideo) {
-    htmlBtn.hidden = false;
-    htmlBtn.addEventListener('click', () => copyResultHtml(node, htmlBtn));
-  }
   el.results.prepend(node);
   el.gallery.hidden = false;
   latestBatch = Math.max(latestBatch, batch);
   return node;
-}
-
-// Builds a <video> snippet for this card's export batch (WebM/MP4/poster
-// PNG, whichever files that batch produced — batch cards, including ones
-// restored from IndexedDB, all carry the same data-batch) and copies it
-// to the clipboard.
-async function copyResultHtml(card, btn) {
-  const batch = card.dataset.batch;
-  const names = [...el.results.querySelectorAll(`.result-card[data-batch="${batch}"]`)]
-    .map((c) => c.querySelector('.result-download').download);
-  const webm = names.find((n) => n.endsWith('.webm'));
-  const mp4 = names.find((n) => n.endsWith('.mp4'));
-  const png = names.find((n) => n.endsWith('.png'));
-  const sources = [];
-  if (webm) sources.push(`  <source src="${webm}" type="video/webm">`);
-  if (mp4) sources.push(`  <source src="${mp4}" type="video/mp4">`);
-  const posterAttr = png ? ` poster="${png}"` : '';
-  const html = `<video autoplay muted loop playsinline${posterAttr}>\n${sources.join('\n')}\n</video>`;
-  try {
-    await navigator.clipboard.writeText(html);
-    const original = btn.textContent;
-    btn.textContent = 'Скопировано';
-    setTimeout(() => {
-      btn.textContent = original;
-    }, 1500);
-  } catch (err) {
-    console.warn(err);
-    showStatus('Не удалось скопировать HTML — скопируйте вручную из буфера обмена браузера.', 'error');
-  }
 }
 
 function removeCard(card) {
