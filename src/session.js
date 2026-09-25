@@ -65,6 +65,7 @@ const VALIDATORS = {
   format: oneOf('webm+mp4', 'webm', 'mp4', 'gif'),
   bitrate: numberIn(0.5, 10),
   gifWidth: numberIn(240, 960),
+  poster: (v) => typeof v === 'boolean',
 };
 
 export function loadSettings() {

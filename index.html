@@ -154,6 +154,12 @@
             <span aria-hidden="true">×</span>
             <input id="customHeight" class="input" type="number" min="64" max="3840" step="2" aria-label="Высота" />
           </div>
+          <div class="size-presets" role="group" aria-label="Готовые размеры">
+            <button type="button" class="size-preset-btn" data-w="1920" data-h="1080" aria-pressed="false">1920×1080</button>
+            <button type="button" class="size-preset-btn" data-w="1280" data-h="720" aria-pressed="false">1280×720</button>
+            <button type="button" class="size-preset-btn" data-w="1080" data-h="1920" aria-pressed="false">1080×1920</button>
+            <button type="button" class="size-preset-btn" data-w="1080" data-h="1080" aria-pressed="false">1080×1080</button>
+          </div>
         </div>
 
         <div class="field-pair">
@@ -193,6 +199,11 @@
         <label class="slider slider-compact" id="gifWidthField">
           <span class="slider-labels">Ширина GIF <output id="gifWidthOut"></output></span>
           <input id="gifWidth" type="range" min="240" max="960" step="20" />
+        </label>
+
+        <label class="checkbox-field" id="posterField">
+          <input id="poster" type="checkbox" />
+          <span>PNG-постер (первый кадр)</span>
         </label>
 
         <label class="field field-format">
@@ -264,7 +275,10 @@
         <span class="result-name"></span>
         <span class="result-size"></span>
       </div>
-      <a class="result-download" download>Скачать</a>
+      <div class="result-actions">
+        <a class="result-download" download>Скачать</a>
+        <button type="button" class="result-html-btn" hidden>HTML</button>
+      </div>
     </div>
   </template>
 

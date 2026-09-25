@@ -46,6 +46,7 @@ const state = {
   format: 'webm+mp4', // 'webm+mp4' | 'webm' | 'mp4' | 'gif'
   bitrate: 1.5, // Mbit/s
   gifWidth: 480,
+  poster: true, // export a phase-0 PNG alongside video formats
 };
 
 // Factory values (double-click / reset targets), then the previous
@@ -64,7 +65,7 @@ if (!state.patternHistory.some((item) => seedsEqual(item.seed, state.seed))) {
   state.patternHistory = state.patternHistory.slice(0, MAX_PATTERN_HISTORY);
 }
 
-const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF' };
+const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF', png: 'PNG' };
 
 const FORMAT_HINTS = {
   'webm+mp4': 'Для hero-секции: WebM (VP9) — основной файл, MP4 (H.264) — запасной для Safari. Подключайте оба через <source>.',
@@ -137,6 +138,7 @@ const el = {
   speedOut: document.getElementById('speedOut'),
   customWidth: document.getElementById('customWidth'),
   customHeight: document.getElementById('customHeight'),
+  sizePresetBtns: [...document.querySelectorAll('.size-preset-btn')],
   duration: document.getElementById('duration'),
   fps: document.getElementById('fps'),
   grainEnabled: document.getElementById('grainEnabled'),
@@ -164,6 +166,8 @@ const el = {
   gifWidthField: document.getElementById('gifWidthField'),
   gifWidth: document.getElementById('gifWidth'),
   gifWidthOut: document.getElementById('gifWidthOut'),
+  posterField: document.getElementById('posterField'),
+  poster: document.getElementById('poster'),
   exportBtn: document.getElementById('exportBtn'),
   exportLabel: document.getElementById('exportLabel'),
   exportMeta: document.getElementById('exportMeta'),
@@ -568,6 +572,7 @@ function updateOutputMeta() {
   const isGif = state.format === 'gif';
   el.bitrateField.hidden = isGif;
   el.gifWidthField.hidden = !isGif;
+  el.posterField.hidden = isGif;
 
   el.exportLabel.textContent = `Экспорт ${FORMAT_LABELS[state.format]}`;
   const seconds = `${state.duration.toFixed(1)} с`;
@@ -592,12 +597,33 @@ el.format.addEventListener('change', () => {
   updateOutputMeta();
 });
 
+el.poster.checked = state.poster;
+el.poster.addEventListener('change', () => {
+  state.poster = el.poster.checked;
+});
+
+function updateSizePresetActive() {
+  el.sizePresetBtns.forEach((btn) => {
+    const match = Number(btn.dataset.w) === state.width && Number(btn.dataset.h) === state.height;
+    btn.setAttribute('aria-pressed', String(match));
+  });
+}
+
 function applyResolution(w, h) {
   state.width = w;
   state.height = h;
   updateOutputMeta();
   refreshPreviewRenderSize();
+  updateSizePresetActive();
 }
+
+el.sizePresetBtns.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    applyResolution(Number(btn.dataset.w), Number(btn.dataset.h));
+    el.customWidth.value = state.width;
+    el.customHeight.value = state.height;
+  });
+});
 
 // Rounded to even: H.264 (4:2:0) encoders reject odd frame dimensions.
 function clampSize(value, fallback) {
@@ -608,6 +634,7 @@ function clampSize(value, fallback) {
 
 el.customWidth.value = state.width;
 el.customHeight.value = state.height;
+updateSizePresetActive();
 el.customWidth.addEventListener('change', () => {
   applyResolution(clampSize(el.customWidth.value, state.width), state.height);
   el.customWidth.value = state.width;
@@ -987,10 +1014,44 @@ function renderResult({ id, name, blob, isVideo, width, height, batch }) {
   // WebM and MP4 of one export share a name and thumbnail, so say which is which.
   const ext = name.slice(name.lastIndexOf('.') + 1);
   link.textContent = `Скачать ${FORMAT_LABELS[ext] ?? ext.toUpperCase()}`;
+  const htmlBtn = node.querySelector('.result-html-btn');
+  if (isVideo) {
+    htmlBtn.hidden = false;
+    htmlBtn.addEventListener('click', () => copyResultHtml(node, htmlBtn));
+  }
   el.results.prepend(node);
   el.gallery.hidden = false;
   latestBatch = Math.max(latestBatch, batch);
   return node;
+}
+
+// Builds a <video> snippet for this card's export batch (WebM/MP4/poster
+// PNG, whichever files that batch produced — batch cards, including ones
+// restored from IndexedDB, all carry the same data-batch) and copies it
+// to the clipboard.
+async function copyResultHtml(card, btn) {
+  const batch = card.dataset.batch;
+  const names = [...el.results.querySelectorAll(`.result-card[data-batch="${batch}"]`)]
+    .map((c) => c.querySelector('.result-download').download);
+  const webm = names.find((n) => n.endsWith('.webm'));
+  const mp4 = names.find((n) => n.endsWith('.mp4'));
+  const png = names.find((n) => n.endsWith('.png'));
+  const sources = [];
+  if (webm) sources.push(`  <source src="${webm}" type="video/webm">`);
+  if (mp4) sources.push(`  <source src="${mp4}" type="video/mp4">`);
+  const posterAttr = png ? ` poster="${png}"` : '';
+  const html = `<video autoplay muted loop playsinline${posterAttr}>\n${sources.join('\n')}\n</video>`;
+  try {
+    await navigator.clipboard.writeText(html);
+    const original = btn.textContent;
+    btn.textContent = 'Скопировано';
+    setTimeout(() => {
+      btn.textContent = original;
+    }, 1500);
+  } catch (err) {
+    console.warn(err);
+    showStatus('Не удалось скопировать HTML — скопируйте вручную из буфера обмена браузера.', 'error');
+  }
 }
 
 function removeCard(card) {
@@ -1066,7 +1127,7 @@ const EXPORT_STATE_KEYS = [
   'colors', 'scale', 'warp', 'softness', 'speed', 'seed',
   'grainEnabled', 'grainSize', 'grainDensity', 'grainOpacity',
   'grainVariance', 'grainSoftness', 'grainBlend', 'grainColor',
-  'width', 'height', 'duration', 'fps', 'format', 'bitrate', 'gifWidth',
+  'width', 'height', 'duration', 'fps', 'format', 'bitrate', 'gifWidth', 'poster',
 ];
 
 function snapshotExportState() {
@@ -1085,6 +1146,27 @@ async function exportOneVideo(snapshot, container, stepLabel, batch, signal) {
   const blob = await exportVideo({ container, canvas, renderFrame, width, height, fps, duration, bitrate, onProgress, signal });
   const name = `liquid-gradient-${width}x${height}.${container}`;
   addResult({ name, blob, isVideo: true, width, height, batch });
+  return `${name} (${formatBytes(blob.size)})`;
+}
+
+// Renders the same snapshot at phase 0 (the exported loop's first frame)
+// at the export size and saves it as a PNG poster — for the <video
+// poster="..."> attribute. Reuses the WebGL canvas right after a video
+// export's own renders, so it must run before setBusy(false) restores the
+// preview loop. The canvas context is created with preserveDrawingBuffer
+// (LiquidGradientRenderer.js), so render() then toBlob() back-to-back,
+// with nothing else touching the canvas in between, always reads the
+// frame that was just drawn.
+async function exportPosterFile(snapshot, batch, signal) {
+  if (signal.aborted) throw new DOMException('Экспорт отменён.', 'AbortError');
+  const { width, height, fps } = snapshot;
+  renderer.setSize(width, height);
+  renderer.render(buildParams(snapshot, fps), 0);
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Не удалось создать PNG'))), 'image/png');
+  });
+  const name = `liquid-gradient-${width}x${height}.png`;
+  addResult({ name, blob, isVideo: false, width, height, batch });
   return `${name} (${formatBytes(blob.size)})`;
 }
 
@@ -1156,6 +1238,18 @@ el.exportBtn.addEventListener('click', async () => {
           // away the other one that already succeeded.
           console.error(err);
           failed.push(`${container.toUpperCase()}: ${err.message}`);
+        }
+      }
+      if (!cancelled && snapshot.poster) {
+        try {
+          done.push(await exportPosterFile(snapshot, batch, controller.signal));
+        } catch (err) {
+          if (isAbortError(err)) {
+            cancelled = true;
+          } else {
+            console.error(err);
+            failed.push(`PNG: ${err.message}`);
+          }
         }
       }
     }

@@ -172,6 +172,26 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   already the only way to stop, so cancelling then calls the GIF's
   `.abort()` (present in `vendor/gifjs/gif.js`) and the pending promise
   rejects with the abort signal's reason.
+- **PNG poster.** `state.poster` (bool, default `true`; in
+  `EXPORT_STATE_KEYS`/`VALIDATORS`) adds a checkbox in `.output-settings`,
+  hidden for GIF. For video formats, after the container(s) export, the
+  click handler renders the same snapshot's phase 0 at export size
+  (`renderer.setSize`/`render`) and calls `canvas.toBlob(...,
+  'image/png')` immediately after — safe because the GL context is
+  created with `preserveDrawingBuffer: true`. Saved via `addResult` as
+  `liquid-gradient-WxH.png`, same `batch`, `isVideo: false` (shown as
+  `<img>`); `FORMAT_LABELS.png` gives the download button "Скачать PNG".
+- **"HTML" copy button** on every video result card (fresh or restored
+  from IndexedDB — added in `renderResult()`, keyed off `isVideo`) copies
+  a `<video autoplay muted loop playsinline poster="...">` snippet built
+  from that card's `data-batch` siblings: `<source>` for each of
+  webm/mp4 present (webm first), `poster` only if that batch has a PNG.
+  Uses `navigator.clipboard.writeText`; button label flips to
+  "Скопировано" for 1.5s, or `showStatus` reports a clipboard failure.
+- **Size preset buttons** (`.size-preset-btn`, under the width×height
+  fields) call the existing `applyResolution()`; `aria-pressed` tracks
+  whether `state.width`/`height` match, refreshed by
+  `updateSizePresetActive()` on every `applyResolution()` call.
 - **Exporters** all take a `renderFrame(phase)` callback and drive it
   frame-by-frame at exact `phase = i / totalFrames` steps. The UI has one
   export button; `state.format` is `'webm+mp4' | 'webm' | 'mp4' | 'gif'`
