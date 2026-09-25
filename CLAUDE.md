@@ -94,6 +94,25 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   deleted from both the DB and the gallery. `batch` is the export
   click's timestamp; every card of the newest batch (WebM + MP4 = two
   files) gets the "Последнее" badge. Storage errors only `console.warn`.
+- **Pattern history** (`#patternHistory`, bottom of `.canvas-wrap`) — the
+  last `MAX_PATTERN_HISTORY` (5) seeds, newest first, as
+  `state.patternHistory = [{ seed, createdAt }]`, persisted like any
+  other state key. "Новый узор" unshifts an entry; clicking one only
+  sets `state.seed` (order and timestamps never change); `aria-pressed`
+  marks the entry whose seed equals `state.seed`. On load the current
+  seed is added if missing, so the strip is never empty. Labels: a
+  bare age on screen ("42 с", "3 мин", fits 48px items), the full
+  `Intl.RelativeTimeFormat('ru')` phrase in title/aria-label; refreshed
+  every second so the first minute counts up. Thumbnails are
+  rendered on the shared WebGL canvas inside `previewLoop`'s
+  `!exporting` branch, before the preview's own render, at phase 0 with
+  grain off, and copied into per-item 2D canvases with `drawImage` right
+  after each draw; the preview render afterwards restores the size. They
+  redraw only when `patternSignature()` changes (colors, scale, warp,
+  softness, speed, size, history seeds), throttled. **A new shader param
+  that changes the phase-0 image must be added to `patternSignature()`**,
+  or thumbnails go stale. `.canvas-box` reserves `--pattern-strip-h` at
+  the bottom so the canvas never sits under the strip.
 - **`src/render/shaders.js`** — GLSL source as template strings
   (`VERTEX_SHADER`, `FRAGMENT_SHADER`), plus the vendored 4D simplex
   noise (`SIMPLEX_4D`). The vertex shader draws a fullscreen triangle

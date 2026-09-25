@@ -134,6 +134,7 @@
       <div class="canvas-box">
         <canvas id="previewCanvas"></canvas>
       </div>
+      <div id="patternHistory" class="pattern-history" role="group" aria-label="История узоров"></div>
     </section>
 
     <section class="card output" aria-label="Экспорт">
@@ -244,6 +245,13 @@
       />
       <button type="button" class="icon-btn icon-btn-muted remove-color" title="Удалить цвет" aria-label="Удалить цвет">✕</button>
     </div>
+  </template>
+
+  <template id="patternItemTemplate">
+    <button type="button" class="pattern-item" aria-pressed="false">
+      <canvas class="pattern-thumb"></canvas>
+      <span class="pattern-time"></span>
+    </button>
   </template>
 
   <template id="resultTemplate">

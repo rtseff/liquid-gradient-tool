@@ -11,6 +11,11 @@ const STORE = 'results';
 // Oldest results beyond this are dropped from storage (and the gallery).
 export const MAX_SAVED_RESULTS = 30;
 
+// Oldest pattern-history entries beyond this are dropped, both here (the
+// validator) and in main.js (which also imports this to cap the array it
+// builds).
+export const MAX_PATTERN_HISTORY = 5;
+
 // --- Settings ---------------------------------------------------------------
 
 const HEX = /^#[0-9a-f]{6}$/;
@@ -19,13 +24,31 @@ const HEX = /^#[0-9a-f]{6}$/;
 // otherwise the default stays. Ranges mirror the controls in index.html.
 const numberIn = (min, max) => (v) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
 const oneOf = (...values) => (v) => values.includes(v);
+const isSeed = (v) => Array.isArray(v) && v.length === 2 && v.every(numberIn(-1e6, 1e6));
+// A saved value with more entries than MAX_PATTERN_HISTORY (e.g. from a
+// future version) is rejected wholesale, same as any other out-of-range
+// value, and the default (an empty array, then re-seeded from
+// state.seed) takes over.
+const isPatternHistory = (v) =>
+  Array.isArray(v) &&
+  v.length <= MAX_PATTERN_HISTORY &&
+  v.every(
+    (item) =>
+      item &&
+      typeof item === 'object' &&
+      isSeed(item.seed) &&
+      typeof item.createdAt === 'number' &&
+      Number.isFinite(item.createdAt) &&
+      item.createdAt > 0,
+  );
 const VALIDATORS = {
   colors: (v) => Array.isArray(v) && v.length >= 2 && v.length <= 6 && v.every((c) => typeof c === 'string' && HEX.test(c)),
   scale: numberIn(0.6, 5),
   warp: numberIn(0, 2.5),
   softness: numberIn(0, 1),
   speed: numberIn(0, 1),
-  seed: (v) => Array.isArray(v) && v.length === 2 && v.every(numberIn(-1e6, 1e6)),
+  seed: isSeed,
+  patternHistory: isPatternHistory,
   grainEnabled: (v) => typeof v === 'boolean',
   grainSize: (v) => Number.isInteger(v) && v >= 1 && v <= 8,
   grainDensity: numberIn(0.02, 1),
