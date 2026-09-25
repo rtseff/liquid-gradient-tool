@@ -210,6 +210,16 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   frames at default settings (1600×900 → 480×270 GIF) were a cropped
   top-left corner of the full-size render. Any new export path must go
   through `setBusy(true)` too.
+- **Preview renders at screen size, not export size** (grain off):
+  `previewRenderSize` = the export aspect contain-fit into `.canvas-box`
+  × `devicePixelRatio` × boot.js's root `zoom`, capped at the export
+  size, `h` derived from `w` so the aspect matches to the pixel. With
+  grain on it's the full export size (grain is in output pixels).
+  Cached; recomputed by `refreshPreviewRenderSize()` on a ResizeObserver
+  over `.canvas-box`, `applyResolution()` and the grain toggle, never per
+  frame. It also sets `canvas.style.width/height` explicitly — otherwise
+  `max-width/max-height: 100%` would size the canvas from its (now
+  smaller) buffer. Exports and thumbnails set their own size as before.
 - **UI layout** follows the Figma mock (file `crJpeY2AsxP794ZHPIIQwd`,
   node `2001:115`; its colors are the tokens on `:root` in `style.css`).
   `.layout` is one flat CSS grid with named areas: `.controls` (colors +

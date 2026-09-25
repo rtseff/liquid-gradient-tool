@@ -528,6 +528,7 @@ updateGrainVisibility();
 el.grainEnabled.addEventListener('change', () => {
   state.grainEnabled = el.grainEnabled.checked;
   updateGrainVisibility();
+  refreshPreviewRenderSize();
 });
 
 // Same swatch <-> hex behavior as the palette rows: apply a hex as soon as
@@ -595,6 +596,7 @@ function applyResolution(w, h) {
   state.width = w;
   state.height = h;
   updateOutputMeta();
+  refreshPreviewRenderSize();
 }
 
 // Rounded to even: H.264 (4:2:0) encoders reject odd frame dimensions.
@@ -712,6 +714,79 @@ function renderPatternThumbnails() {
   }
 }
 
+// --- Preview render size ---------------------------------------------------
+//
+// The exported size (up to 3840x2160) is only needed pixel-for-pixel for
+// two things that read exact output pixels: grain (drawn in output
+// pixels, gl_FragCoord — see CLAUDE.md) and exports/thumbnails, which
+// each set their own canvas size directly around their own render call.
+// The live preview itself is shown shrunk to a few hundred px on screen,
+// so rendering the full export size every frame wastes GPU time for no
+// visible gain. With grain off, the render buffer is instead sized to
+// the canvas's actual on-screen footprint — CSS size x devicePixelRatio
+// x the root `zoom` boot.js applies — capped at the export size, with the
+// export's aspect ratio preserved to the pixel (so u_resolution, which
+// the shader derives uv from, always has the same aspect as the export).
+// With grain on, it's the full export size, same as before, so grain's
+// per-output-pixel cell size and jitter look exactly as they will in the
+// exported file.
+//
+// Recomputed only when the canvas's box resizes, the export size changes
+// (applyResolution) or grain is toggled — never per frame off a
+// getBoundingClientRect() call.
+
+function currentZoom() {
+  const z = parseFloat(document.documentElement.style.zoom);
+  return Number.isFinite(z) && z > 0 ? z : 1;
+}
+
+// "Contain"-fits state.width:state.height into the canvas's box, in the
+// box's own (pre-zoom) CSS pixel space — same space canvas.offsetWidth
+// and friends already use elsewhere in this file.
+function previewCssFitSize() {
+  const box = canvas.parentElement;
+  const boxW = box.clientWidth;
+  const boxH = box.clientHeight;
+  if (!boxW || !boxH || !state.width || !state.height) {
+    return { cssW: state.width || 1, cssH: state.height || 1 };
+  }
+  const scale = Math.min(boxW / state.width, boxH / state.height);
+  return { cssW: state.width * scale, cssH: state.height * scale };
+}
+
+function computePreviewRenderSize() {
+  const { cssW, cssH } = previewCssFitSize();
+  if (state.grainEnabled) {
+    return { w: state.width, h: state.height, cssW, cssH };
+  }
+  const factor = (window.devicePixelRatio || 1) * currentZoom();
+  const w = Math.min(state.width, Math.max(1, Math.round(cssW * factor)));
+  // Derived from the (possibly capped) w, not rounded independently, so
+  // the buffer's aspect always matches the export's to the pixel.
+  const h = Math.min(state.height, Math.max(1, Math.round((w * state.height) / state.width)));
+  return { w, h, cssW, cssH };
+}
+
+let previewRenderSize = { w: state.width, h: state.height, cssW: state.width, cssH: state.height };
+
+function refreshPreviewRenderSize() {
+  previewRenderSize = computePreviewRenderSize();
+  canvas.style.width = `${previewRenderSize.cssW}px`;
+  canvas.style.height = `${previewRenderSize.cssH}px`;
+}
+
+refreshPreviewRenderSize();
+
+// The box's own size drives the fit; resizing the canvas itself (done
+// above, and by exports/thumbnails setting canvas.width/height directly)
+// must not re-trigger this or it'd fight exports over the buffer size —
+// only the box is observed here. Changing canvas.style.width/height does
+// resize the canvas element itself, which is exactly what the separate
+// radiusObserver below (observing `canvas`) is for, so corner handles
+// stay put without an explicit call here.
+const previewSizeObserver = new ResizeObserver(refreshPreviewRenderSize);
+previewSizeObserver.observe(canvas.parentElement);
+
 // --- Preview corner radius ------------------------------------------------
 //
 // Drag any corner handle toward the centre to round the preview's corners
@@ -822,7 +897,7 @@ function previewLoop(now) {
     }
     const elapsedSec = (now - previewStart) / 1000;
     const phase = (elapsedSec % state.duration) / state.duration;
-    renderer.setSize(state.width, state.height);
+    renderer.setSize(previewRenderSize.w, previewRenderSize.h);
     renderer.render(currentParams(), phase);
   }
   requestAnimationFrame(previewLoop);
