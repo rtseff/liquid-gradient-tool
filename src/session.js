@@ -16,6 +16,10 @@ export const MAX_SAVED_RESULTS = 30;
 // builds).
 export const MAX_PATTERN_HISTORY = 5;
 
+// What each pattern-history entry remembers besides its seed: the look
+// it had, so switching to it restores its form and palette.
+export const PATTERN_KEYS = Object.freeze(['colors', 'scale', 'warp', 'softness', 'speed']);
+
 // --- Settings ---------------------------------------------------------------
 
 const HEX = /^#[0-9a-f]{6}$/;
@@ -49,7 +53,13 @@ const isPatternHistory = (v) =>
       typeof item.createdAt === 'number' &&
       Number.isFinite(item.createdAt) &&
       item.createdAt > 0 &&
-      (item.pinned === undefined || typeof item.pinned === 'boolean'),
+      (item.pinned === undefined || typeof item.pinned === 'boolean') &&
+      // params is optional too (histories saved before it existed get the
+      // current look on load); when present, every key must be valid.
+      (item.params === undefined ||
+        (item.params &&
+          typeof item.params === 'object' &&
+          PATTERN_KEYS.every((key) => VALIDATORS[key](item.params[key])))),
   );
 const VALIDATORS = {
   colors: (v) => Array.isArray(v) && v.length >= 2 && v.length <= 6 && v.every((c) => typeof c === 'string' && HEX.test(c)),

@@ -12,6 +12,7 @@ import {
   deleteResults,
   MAX_SAVED_RESULTS,
   MAX_PATTERN_HISTORY,
+  PATTERN_KEYS,
 } from './session.js';
 
 // Settings shared via "Скопировать ссылку на настройки" leave out
@@ -168,11 +169,20 @@ function pushPatternHistory(entry) {
   }
 }
 
+// The look a history entry keeps: its own copy of PATTERN_KEYS.
+function patternParamsOf(source) {
+  const params = {};
+  for (const key of PATTERN_KEYS) params[key] = structuredClone(source[key]);
+  return params;
+}
+
 // First run, or a session saved before pattern history existed: seed the
 // history with the current pattern so it's never empty.
 if (!state.patternHistory.some((item) => seedsEqual(item.seed, state.seed))) {
-  pushPatternHistory({ seed: [...state.seed], createdAt: Date.now() });
+  pushPatternHistory({ seed: [...state.seed], createdAt: Date.now(), params: patternParamsOf(state) });
 }
+// Entries saved before they carried params: best guess is the current look.
+for (const item of state.patternHistory) item.params ??= patternParamsOf(state);
 if (pendingLinkStatus?.kind === 'success') saveSettings(state);
 
 const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF', png: 'PNG' };
@@ -536,6 +546,10 @@ updateHistoryButtons();
 
 // --- Sliders -------------------------------------------------------------
 
+// key -> the slider's apply(), so code that changes state (switching to a
+// history entry) can move the slider with it.
+const rangeAppliers = {};
+
 function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
   const defaultValue = DEFAULTS[key];
   const min = parseFloat(input.min);
@@ -549,6 +563,7 @@ function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
     onChange?.();
   };
   apply(state[key]);
+  rangeAppliers[key] = apply;
   input.title = 'Двойной клик — значение по умолчанию';
   input.addEventListener('input', () => apply(parseFloat(input.value)));
   input.addEventListener('dblclick', () => apply(defaultValue));
@@ -563,7 +578,7 @@ bindRange(el.bitrate, el.bitrateOut, 'bitrate', (v) => `${v.toFixed(1)} Мбит
 
 el.newPatternBtn.addEventListener('click', () => {
   state.seed = [randomSeedValue(), randomSeedValue()];
-  pushPatternHistory({ seed: [...state.seed], createdAt: Date.now() });
+  pushPatternHistory({ seed: [...state.seed], createdAt: Date.now(), params: patternParamsOf(state) });
   renderPatternHistory();
 });
 
@@ -652,6 +667,30 @@ function togglePatternPin(item) {
   updatePatternPins();
 }
 
+// Switching to an entry brings back its look: sliders move, the palette
+// is re-rendered and lands on the palette undo stack like any other edit.
+function applyPatternParams(params) {
+  const colorsChanged = params.colors.join(',') !== state.colors.join(',');
+  for (const key of PATTERN_KEYS) {
+    if (key === 'colors') state.colors = [...params.colors];
+    else rangeAppliers[key](params[key]);
+  }
+  if (colorsChanged) {
+    pushColorHistory();
+    renderColorList();
+  }
+}
+
+// The active entry follows the controls, so edits made while it is
+// selected are still there after switching away and back. Other entries
+// keep their own params. Called every preview frame; cheap (5 small keys).
+function syncActivePattern() {
+  const active = state.patternHistory.find((item) => seedsEqual(item.seed, state.seed));
+  if (!active) return;
+  const current = patternParamsOf(state);
+  if (JSON.stringify(active.params) !== JSON.stringify(current)) active.params = current;
+}
+
 function renderPatternHistory() {
   el.patternHistory.innerHTML = '';
   patternButtons = state.patternHistory.map((item) => {
@@ -667,6 +706,7 @@ function renderPatternHistory() {
       // instead so the click isn't lost.
       if (exporting) return;
       state.seed = [...item.seed];
+      applyPatternParams(item.params);
       updatePatternActive();
     });
     pinBtn.addEventListener('click', () => togglePatternPin(item));
@@ -901,24 +941,21 @@ function thumbSize() {
 
 function patternSignature() {
   return JSON.stringify([
-    state.colors,
-    state.scale,
-    state.warp,
-    state.softness,
-    state.speed, // amplitude moves the phase-0 point too
     state.width,
     state.height,
-    state.patternHistory.map((item) => item.seed),
+    // Each entry's own look (speed included: amplitude moves the phase-0
+    // point too).
+    state.patternHistory.map((item) => [item.seed, item.params]),
   ]);
 }
 
 function renderPatternThumbnails() {
   if (!patternButtons.length) return;
   const { w: tw, h: th } = thumbSize();
-  const baseParams = currentParams();
   for (const { item, thumbCanvas } of patternButtons) {
+    const params = buildParams({ ...state, ...item.params, seed: item.seed }, state.fps);
     renderer.setSize(tw, th);
-    renderer.render({ ...baseParams, seed: item.seed, grain: { ...baseParams.grain, enabled: false } }, 0);
+    renderer.render({ ...params, grain: { ...params.grain, enabled: false } }, 0);
     thumbCanvas.width = tw;
     thumbCanvas.height = th;
     thumbCanvas.getContext('2d').drawImage(canvas, 0, 0, tw, th);
@@ -1100,6 +1137,7 @@ radiusObserver.observe(canvas.parentElement);
 const previewStart = performance.now();
 function previewLoop(now) {
   if (!exporting) {
+    syncActivePattern();
     const signature = patternSignature();
     if (signature !== lastPatternSignature && now - lastPatternThumbRender > THUMB_THROTTLE_MS) {
       lastPatternSignature = signature;

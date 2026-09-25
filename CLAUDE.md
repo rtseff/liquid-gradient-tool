@@ -137,9 +137,17 @@ for exactly that reason.
   works in any keyboard layout — clicks that same button, unless a text
   field has focus, an export is running, or it's a key-repeat) — the
   last `MAX_PATTERN_HISTORY` (5) seeds, newest first, as
-  `state.patternHistory = [{ seed, createdAt, pinned? }]`, persisted
-  like any other state key. "Новый узор" unshifts an entry; clicking one
-  only sets `state.seed` (order and timestamps never change);
+  `state.patternHistory = [{ seed, createdAt, pinned?, params }]`,
+  persisted like any other state key. `params` is the entry's own look
+  (`PATTERN_KEYS` in session.js: colors, scale, warp, softness, speed).
+  "Новый узор" unshifts an entry with the current look; clicking one
+  sets `state.seed` and restores its `params` into the sliders and
+  palette (`applyPatternParams()`; a palette change goes on the undo
+  stack). The *active* entry follows the controls (`syncActivePattern()`
+  each preview frame), so edits stay with it; other entries never
+  change. Thumbnails render each entry with its own `params`. Entries
+  saved before `params` existed get the current look on load. Order and
+  timestamps never change;
   `aria-pressed` marks the entry whose seed equals `state.seed`. Each
   entry also has a ☆/★ pin toggle (`.pattern-pin`, layered over the
   thumbnail's corner via a `.pattern-slot` wrapper — `<button>` can't
@@ -161,8 +169,8 @@ for exactly that reason.
   `!exporting` branch, before the preview's own render, at phase 0 with
   grain off, and copied into per-item 2D canvases with `drawImage` right
   after each draw; the preview render afterwards restores the size. They
-  redraw only when `patternSignature()` changes (colors, scale, warp,
-  softness, speed, size, history seeds), throttled. **A new shader param
+  redraw only when `patternSignature()` changes (export size, each
+  entry's seed and params), throttled. **A new shader param
   that changes the phase-0 image must be added to `patternSignature()`**,
   or thumbnails go stale. `.canvas-box` reserves `--pattern-strip-h` at
   the bottom so the canvas never sits under the strip.
