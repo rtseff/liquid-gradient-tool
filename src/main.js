@@ -5,12 +5,53 @@ import { PRESETS, presetGradientCss } from './presets.js';
 import {
   loadSettings,
   saveSettings,
+  validateSettings,
+  SETTINGS_KEYS,
   saveResult,
   loadResults,
   deleteResults,
   MAX_SAVED_RESULTS,
   MAX_PATTERN_HISTORY,
 } from './session.js';
+
+// Settings shared via "Скопировать ссылку на настройки" leave out
+// patternHistory (personal — not something a link recipient should
+// inherit) and previewRadius (a preview-only cosmetic, not part of the
+// gradient itself).
+const LINK_EXCLUDED_SETTINGS = new Set(['patternHistory', 'previewRadius']);
+
+// Max pinned pattern-history entries — one slot short of the strip's
+// cap so a freshly generated pattern always has room (see
+// pushPatternHistory()).
+const MAX_PINNED_PATTERNS = MAX_PATTERN_HISTORY - 1;
+
+// base64url, safe for UTF-8: TextEncoder -> btoa over the raw bytes,
+// then the usual +/ -> -_ swap and padding strip (and the reverse for
+// decoding). Used for the settings-link hash.
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b);
+  });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBytes(b64url) {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function encodeSettingsLink(obj) {
+  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(obj)));
+}
+
+function decodeSettingsLink(b64url) {
+  return new TextDecoder().decode(base64UrlToBytes(b64url));
+}
 
 const MAX_COLORS = 6;
 const MIN_COLORS = 2;
@@ -54,16 +95,57 @@ const state = {
 const DEFAULTS = structuredClone(state);
 Object.assign(state, loadSettings());
 
+// "Скопировать ссылку на настройки" import: a `#s=<base64url JSON>` hash
+// overrides the restored settings once. Applied here, before the
+// pattern-history seeding below, so a seed carried by the link is picked
+// up by that same "add current seed if missing" logic. The hash is then
+// stripped (so reloading doesn't reapply it) and, since this change
+// didn't come from a user event, saved immediately rather than waiting
+// for the debounced auto-save. Status is shown once `el` exists, below.
+let pendingLinkStatus = null;
+const settingsLinkMatch = location.hash.match(/(?:^|[&#])s=([^&]*)/);
+if (settingsLinkMatch) {
+  try {
+    const imported = validateSettings(JSON.parse(decodeSettingsLink(settingsLinkMatch[1])));
+    Object.assign(state, imported);
+    pendingLinkStatus = { message: 'Настройки из ссылки применены.', kind: 'success' };
+  } catch (err) {
+    console.warn('Broken settings link:', err);
+    pendingLinkStatus = { message: 'Не удалось прочитать ссылку с настройками — она повреждена.', kind: 'error' };
+  }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+
 function seedsEqual(a, b) {
   return a[0] === b[0] && a[1] === b[1];
+}
+
+// Adds a new entry to the front of pattern history. If that pushes the
+// list past MAX_PATTERN_HISTORY, the oldest *unpinned* entry is dropped
+// instead of always the oldest, so pinned patterns survive "Новый узор".
+// Pinning is capped at MAX_PINNED_PATTERNS (below), which leaves at
+// least one unpinned entry to evict whenever the strip is full.
+function pushPatternHistory(entry) {
+  state.patternHistory.unshift(entry);
+  while (state.patternHistory.length > MAX_PATTERN_HISTORY) {
+    let oldestUnpinnedIndex = -1;
+    for (let i = state.patternHistory.length - 1; i >= 0; i--) {
+      if (!state.patternHistory[i].pinned) {
+        oldestUnpinnedIndex = i;
+        break;
+      }
+    }
+    if (oldestUnpinnedIndex === -1) break; // shouldn't happen: see cap above
+    state.patternHistory.splice(oldestUnpinnedIndex, 1);
+  }
 }
 
 // First run, or a session saved before pattern history existed: seed the
 // history with the current pattern so it's never empty.
 if (!state.patternHistory.some((item) => seedsEqual(item.seed, state.seed))) {
-  state.patternHistory.unshift({ seed: [...state.seed], createdAt: Date.now() });
-  state.patternHistory = state.patternHistory.slice(0, MAX_PATTERN_HISTORY);
+  pushPatternHistory({ seed: [...state.seed], createdAt: Date.now() });
 }
+if (pendingLinkStatus?.kind === 'success') saveSettings(state);
 
 const FORMAT_LABELS = { 'webm+mp4': 'WebM + MP4', webm: 'WebM', mp4: 'MP4', gif: 'GIF', png: 'PNG' };
 
@@ -172,6 +254,7 @@ const el = {
   exportLabel: document.getElementById('exportLabel'),
   exportMeta: document.getElementById('exportMeta'),
   formatHint: document.getElementById('formatHint'),
+  copySettingsLinkBtn: document.getElementById('copySettingsLinkBtn'),
   exportProgress: document.getElementById('exportProgress'),
   progressFill: document.getElementById('progressFill'),
   progressLabel: document.getElementById('progressLabel'),
@@ -185,6 +268,36 @@ const el = {
 const colorRowTemplate = document.getElementById('colorRowTemplate');
 const patternItemTemplate = document.getElementById('patternItemTemplate');
 const resultTemplate = document.getElementById('resultTemplate');
+
+// showStatus() is defined further down but hoisted, and el.statusLine
+// exists as of the line above, so the settings-link result (parsed near
+// the top of the module, before el existed) can be surfaced here.
+if (pendingLinkStatus) showStatus(pendingLinkStatus.message, pendingLinkStatus.kind);
+
+el.copySettingsLinkBtn.addEventListener('click', () => copySettingsLink(el.copySettingsLinkBtn));
+
+// Builds `#s=<base64url JSON>` from every persisted setting except
+// patternHistory/previewRadius (see LINK_EXCLUDED_SETTINGS) and copies
+// it to the clipboard — same "Скопировано" idiom as copyResultHtml().
+async function copySettingsLink(btn) {
+  const data = {};
+  for (const key of SETTINGS_KEYS) {
+    if (LINK_EXCLUDED_SETTINGS.has(key)) continue;
+    data[key] = state[key];
+  }
+  const url = `${location.origin}${location.pathname}#s=${encodeSettingsLink(data)}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    const original = btn.textContent;
+    btn.textContent = 'Скопировано';
+    setTimeout(() => {
+      btn.textContent = original;
+    }, 1500);
+  } catch (err) {
+    console.warn(err);
+    showStatus('Не удалось скопировать ссылку — скопируйте вручную из буфера обмена браузера.', 'error');
+  }
+}
 
 // --- Presets ---------------------------------------------------------------
 
@@ -380,6 +493,16 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// "N" for "Новый узор" — e.code so it works in any keyboard layout
+// (including Russian, where e.key would be a Cyrillic letter).
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyN') return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if (isTextEditing(e.target) || exporting) return;
+  e.preventDefault();
+  el.newPatternBtn.click();
+});
+
 renderColorList();
 updateHistoryButtons();
 
@@ -412,8 +535,7 @@ bindRange(el.bitrate, el.bitrateOut, 'bitrate', (v) => `${v.toFixed(1)} Мбит
 
 el.newPatternBtn.addEventListener('click', () => {
   state.seed = [randomSeedValue(), randomSeedValue()];
-  state.patternHistory.unshift({ seed: [...state.seed], createdAt: Date.now() });
-  state.patternHistory = state.patternHistory.slice(0, MAX_PATTERN_HISTORY);
+  pushPatternHistory({ seed: [...state.seed], createdAt: Date.now() });
   renderPatternHistory();
 });
 
@@ -450,10 +572,11 @@ function longAgeLabel(createdAt) {
   return rtf.format(-value, unit);
 }
 
-// { btn, item, thumbCanvas } for the strip's current buttons, kept
-// around so updatePatternActive()/updatePatternTimes() can refresh them
-// without recreating the <canvas> thumbnails (which would lose their
-// rendered pixels for nothing).
+// { slot, btn, item, thumbCanvas, timeEl, pinBtn } for the strip's
+// current buttons, kept around so updatePatternActive()/
+// updatePatternTimes()/updatePatternPins() can refresh them without
+// recreating the <canvas> thumbnails (which would lose their rendered
+// pixels for nothing).
 let patternButtons = [];
 
 function updatePatternActive() {
@@ -472,13 +595,44 @@ function updatePatternTimes() {
   });
 }
 
+// Refreshes every pin button's glyph/label and, once MAX_PINNED_PATTERNS
+// pinned entries exist, disables the pin button on the rest (they'd have
+// nowhere to go — see pushPatternHistory()).
+function updatePatternPins() {
+  const pinnedCount = state.patternHistory.filter((item) => item.pinned).length;
+  patternButtons.forEach(({ slot, pinBtn, item }) => {
+    const pinned = Boolean(item.pinned);
+    pinBtn.textContent = pinned ? '★' : '☆';
+    pinBtn.setAttribute('aria-pressed', String(pinned));
+    slot.classList.toggle('is-pinned', pinned);
+    const atCap = !pinned && pinnedCount >= MAX_PINNED_PATTERNS;
+    pinBtn.disabled = atCap;
+    const label = pinned ? 'Открепить узор' : 'Закрепить узор';
+    pinBtn.title = atCap ? `Можно закрепить не больше ${MAX_PINNED_PATTERNS}` : label;
+    pinBtn.setAttribute('aria-label', label);
+  });
+}
+
+function togglePatternPin(item) {
+  if (item.pinned) {
+    delete item.pinned;
+  } else {
+    const pinnedCount = state.patternHistory.filter((i) => i.pinned).length;
+    if (pinnedCount >= MAX_PINNED_PATTERNS) return;
+    item.pinned = true;
+  }
+  updatePatternPins();
+}
+
 function renderPatternHistory() {
   el.patternHistory.innerHTML = '';
   patternButtons = state.patternHistory.map((item) => {
-    const node = patternItemTemplate.content.firstElementChild.cloneNode(true);
-    const thumbCanvas = node.querySelector('.pattern-thumb');
-    const timeEl = node.querySelector('.pattern-time');
-    node.addEventListener('click', () => {
+    const slot = patternItemTemplate.content.firstElementChild.cloneNode(true);
+    const btn = slot.querySelector('.pattern-item');
+    const thumbCanvas = slot.querySelector('.pattern-thumb');
+    const timeEl = slot.querySelector('.pattern-time');
+    const pinBtn = slot.querySelector('.pattern-pin');
+    btn.addEventListener('click', () => {
       // Export and the preview loop share one canvas; the loop already
       // skips rendering while exporting, so switching the seed mid-export
       // would just be silently ignored until it finishes — refuse it
@@ -487,11 +641,13 @@ function renderPatternHistory() {
       state.seed = [...item.seed];
       updatePatternActive();
     });
-    el.patternHistory.appendChild(node);
-    return { btn: node, item, thumbCanvas, timeEl };
+    pinBtn.addEventListener('click', () => togglePatternPin(item));
+    el.patternHistory.appendChild(slot);
+    return { slot, btn, item, thumbCanvas, timeEl, pinBtn };
   });
   updatePatternActive();
   updatePatternTimes();
+  updatePatternPins();
 }
 
 renderPatternHistory();

@@ -94,14 +94,42 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   deleted from both the DB and the gallery. `batch` is the export
   click's timestamp; every card of the newest batch (WebM + MP4 = two
   files) gets the "Последнее" badge. Storage errors only `console.warn`.
+- **Settings link** — "Скопировать ссылку на настройки" (below
+  `#formatHint` in the export card) copies
+  `location.origin + location.pathname + '#s=' + base64url(JSON)`, the
+  JSON being every `VALIDATORS` key from `session.js` *except*
+  `patternHistory` (personal) and `previewRadius` (preview-only cosmetic)
+  — see `LINK_EXCLUDED_SETTINGS` and `SETTINGS_KEYS` in `main.js`.
+  base64url is UTF-8-safe (`TextEncoder` → `btoa` over the raw bytes,
+  then `+/` → `-_`, padding stripped). On load, a `#s=` hash is decoded
+  and passed through `session.js`'s exported `validateSettings(obj)` —
+  the same per-key check `loadSettings()` uses — before being applied
+  over the restored settings, right where `Object.assign(state,
+  loadSettings())` already sits, so a seed carried by the link flows
+  into the pattern-history seeding right below it. A broken/tampered
+  hash is caught and ignored (`showStatus` reports the error). Either
+  way `history.replaceState()` strips the hash immediately so a reload
+  doesn't reapply it, and a successful import is saved right away with
+  `saveSettings()` since it didn't come from a user event.
 - **Pattern history** (`#patternHistory` in `.pattern-bar` at the bottom
   of `.canvas-wrap`, right of the "↻ Новый узор" button, which drops its
-  text below a 460px-wide preview) — the
+  text below a 460px-wide preview; **N** — `e.code === 'KeyN'`, so it
+  works in any keyboard layout — clicks that same button, unless a text
+  field has focus, an export is running, or it's a key-repeat) — the
   last `MAX_PATTERN_HISTORY` (5) seeds, newest first, as
-  `state.patternHistory = [{ seed, createdAt }]`, persisted like any
-  other state key. "Новый узор" unshifts an entry; clicking one only
-  sets `state.seed` (order and timestamps never change); `aria-pressed`
-  marks the entry whose seed equals `state.seed`. On load the current
+  `state.patternHistory = [{ seed, createdAt, pinned? }]`, persisted
+  like any other state key. "Новый узор" unshifts an entry; clicking one
+  only sets `state.seed` (order and timestamps never change);
+  `aria-pressed` marks the entry whose seed equals `state.seed`. Each
+  entry also has a ☆/★ pin toggle (`.pattern-pin`, layered over the
+  thumbnail's corner via a `.pattern-slot` wrapper — `<button>` can't
+  nest inside `<button>`) — pinned entries are exempt from eviction:
+  `pushPatternHistory()` in `main.js` drops the oldest *unpinned* entry
+  once the list exceeds `MAX_PATTERN_HISTORY`, never a pinned one.
+  Pinning is capped at `MAX_PINNED_PATTERNS` (`MAX_PATTERN_HISTORY − 1`
+  = 4) — one slot short of the cap, so a freshly generated pattern
+  always has somewhere to land; past the cap, other entries' pin buttons
+  go `disabled`. On load the current
   seed is added if missing, so the strip is never empty. Labels: a
   bare age on screen ("42 с", "3 мин", fits 48px items), the full
   `Intl.RelativeTimeFormat('ru')` phrase in title/aria-label; refreshed

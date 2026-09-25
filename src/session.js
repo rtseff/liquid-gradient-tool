@@ -29,6 +29,8 @@ const isSeed = (v) => Array.isArray(v) && v.length === 2 && v.every(numberIn(-1e
 // future version) is rejected wholesale, same as any other out-of-range
 // value, and the default (an empty array, then re-seeded from
 // state.seed) takes over.
+// pinned is optional: absent (or not present at all) means "not pinned",
+// so old saved histories from before pinning existed still validate.
 const isPatternHistory = (v) =>
   Array.isArray(v) &&
   v.length <= MAX_PATTERN_HISTORY &&
@@ -39,7 +41,8 @@ const isPatternHistory = (v) =>
       isSeed(item.seed) &&
       typeof item.createdAt === 'number' &&
       Number.isFinite(item.createdAt) &&
-      item.createdAt > 0,
+      item.createdAt > 0 &&
+      (item.pinned === undefined || typeof item.pinned === 'boolean'),
   );
 const VALIDATORS = {
   colors: (v) => Array.isArray(v) && v.length >= 2 && v.length <= 6 && v.every((c) => typeof c === 'string' && HEX.test(c)),
@@ -68,6 +71,23 @@ const VALIDATORS = {
   poster: (v) => typeof v === 'boolean',
 };
 
+// All VALIDATORS keys, for callers (the settings-link export in main.js)
+// that need "every persisted setting" without duplicating the list.
+export const SETTINGS_KEYS = Object.freeze(Object.keys(VALIDATORS));
+
+// Filters an arbitrary object down to the keys VALIDATORS knows about,
+// keeping only values that pass their validator — used both for the
+// localStorage blob (loadSettings) and for settings decoded from a
+// shared link (main.js), so both paths reject the same malformed data.
+export function validateSettings(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  const result = {};
+  for (const [key, isValid] of Object.entries(VALIDATORS)) {
+    if (key in obj && isValid(obj[key])) result[key] = obj[key];
+  }
+  return result;
+}
+
 export function loadSettings() {
   let saved;
   try {
@@ -75,12 +95,7 @@ export function loadSettings() {
   } catch {
     return {};
   }
-  if (!saved || typeof saved !== 'object') return {};
-  const result = {};
-  for (const [key, isValid] of Object.entries(VALIDATORS)) {
-    if (key in saved && isValid(saved[key])) result[key] = saved[key];
-  }
-  return result;
+  return validateSettings(saved);
 }
 
 export function saveSettings(state) {

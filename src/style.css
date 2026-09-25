@@ -745,16 +745,24 @@ select option {
   display: none;
 }
 
+/* Wraps .pattern-item so the pin button (below) can sit over its
+   thumbnail corner without nesting a <button> inside a <button>. Carries
+   the width .pattern-item itself used to own; .pattern-item just fills it. */
+.pattern-slot {
+  position: relative;
+  flex: none;
+  width: 72px;
+}
+
 .pattern-item {
   display: flex;
-  flex: none;
   flex-direction: column;
   /* Stretch (not center) so .pattern-time below can go width: 100% and
      truncate with an ellipsis instead of growing the button to fit its
      label — otherwise longer labels ("21 ч. назад") made the row uneven. */
   align-items: stretch;
   gap: 4px;
-  width: 72px;
+  width: 100%;
   padding: 0;
   border: none;
   background: none;
@@ -803,6 +811,46 @@ select option {
   color: var(--text);
 }
 
+/* Pin toggle, layered over the thumbnail's top-right corner. Hidden
+   until the slot is hovered/focused, except once pinned it stays put so
+   a pinned pattern is recognizable at a glance. --bg at 78% opacity
+   under white/accent text clears the 3:1 non-text/UI-text-adjacent
+   contrast bar against every thumbnail color, not just flat ones. */
+.pattern-pin {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(10, 10, 12, 0.78); /* --bg at 78% opacity */
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.pattern-slot:hover .pattern-pin,
+.pattern-slot:focus-within .pattern-pin,
+.pattern-pin[aria-pressed='true'] {
+  opacity: 1;
+}
+
+.pattern-pin[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+.pattern-pin:disabled {
+  cursor: not-allowed;
+}
+
 /* Below this, 5 full-size (72px) items don't fit .canvas-wrap's own
    width without scrolling (measured: overflow from ~1024px up to
    ~1700px of viewport width, where .canvas-wrap is the narrow column of
@@ -822,7 +870,7 @@ select option {
     padding: 0 10px;
   }
 
-  .pattern-item {
+  .pattern-slot {
     width: 48px;
   }
 
@@ -832,6 +880,12 @@ select option {
   }
 
   .pattern-time {
+    font-size: 10px;
+  }
+
+  .pattern-pin {
+    width: 16px;
+    height: 16px;
     font-size: 10px;
   }
 }
@@ -862,6 +916,11 @@ select option {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* Sits under #formatHint as a link-styled action, not a full-width row. */
+#copySettingsLinkBtn {
+  align-self: flex-start;
 }
 
 .size-inputs {
@@ -1251,7 +1310,7 @@ select option {
     padding: 0 10px;
   }
 
-  .pattern-item {
+  .pattern-slot {
     width: 48px;
   }
 
@@ -1261,6 +1320,12 @@ select option {
   }
 
   .pattern-time {
+    font-size: 10px;
+  }
+
+  .pattern-pin {
+    width: 16px;
+    height: 16px;
     font-size: 10px;
   }
 }

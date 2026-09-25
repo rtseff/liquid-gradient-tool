@@ -138,7 +138,7 @@
         <span class="radius-handle" data-corner="br" role="slider" tabindex="-1" aria-hidden="true"></span>
       </div>
       <div class="pattern-bar">
-        <button id="newPatternBtn" class="text-btn pattern-new" type="button" title="Тот же характер движения, другой рисунок">
+        <button id="newPatternBtn" class="text-btn pattern-new" type="button" title="Тот же характер движения, другой рисунок (N)">
           <span aria-hidden="true">↻</span><span class="pattern-new-label"> Новый узор</span>
         </button>
         <div id="patternHistory" class="pattern-history" role="group" aria-label="История узоров"></div>
@@ -231,6 +231,7 @@
       </div>
       <p id="statusLine" class="status" role="status" hidden></p>
       <p id="formatHint" class="hint"></p>
+      <button id="copySettingsLinkBtn" class="text-btn" type="button">Скопировать ссылку на настройки</button>
     </section>
 
     <section id="gallery" class="gallery" aria-label="Готовые файлы" hidden>
@@ -260,10 +261,13 @@
   </template>
 
   <template id="patternItemTemplate">
-    <button type="button" class="pattern-item" aria-pressed="false">
-      <canvas class="pattern-thumb"></canvas>
-      <span class="pattern-time"></span>
-    </button>
+    <div class="pattern-slot">
+      <button type="button" class="pattern-item" aria-pressed="false">
+        <canvas class="pattern-thumb"></canvas>
+        <span class="pattern-time"></span>
+      </button>
+      <button type="button" class="pattern-pin" aria-pressed="false" aria-label="Закрепить узор" title="Закрепить узор">☆</button>
+    </div>
   </template>
 
   <template id="resultTemplate">
