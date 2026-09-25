@@ -101,9 +101,9 @@ invariant, and why it holds for any `amplitude`/`loops` value, not just
   sets `state.seed` (order and timestamps never change); `aria-pressed`
   marks the entry whose seed equals `state.seed`. On load the current
   seed is added if missing, so the strip is never empty. Labels: a
-  bare age on screen ("3 мин", fits 48px items), the full
+  bare age on screen ("42 с", "3 мин", fits 48px items), the full
   `Intl.RelativeTimeFormat('ru')` phrase in title/aria-label; refreshed
-  every 30 s. Thumbnails are
+  every second so the first minute counts up. Thumbnails are
   rendered on the shared WebGL canvas inside `previewLoop`'s
   `!exporting` branch, before the preview's own render, at phase 0 with
   grain off, and copied into per-item 2D canvases with `drawImage` right

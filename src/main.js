@@ -419,16 +419,16 @@ el.newPatternBtn.addEventListener('click', () => {
 // Clicking an entry restores its seed without touching the order or
 // timestamps; the active entry is the one whose seed matches state.seed.
 
-// The on-screen label is a bare age ("3 мин", "21 ч") so it fits even
+// The on-screen label is a bare age ("42 с", "3 мин", "21 ч") so it fits even
 // the 48px items without an ellipsis — the strip itself says these are
 // past patterns. The title/aria-label carries the full phrase ("3 минуты
 // назад") and starts with the visible text (WCAG 2.5.3 Label in Name).
 const rtf = new Intl.RelativeTimeFormat('ru', { numeric: 'auto' });
-const SHORT_UNITS = { minute: 'мин', hour: 'ч', day: 'дн' };
+const SHORT_UNITS = { second: 'с', minute: 'мин', hour: 'ч', day: 'дн' };
 
 function relativeTimeParts(createdAt) {
   const diffSec = Math.floor((Date.now() - createdAt) / 1000);
-  if (diffSec < 60) return null; // "только что" has no numeric unit
+  if (diffSec < 60) return [Math.max(0, diffSec), 'second'];
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 60) return [diffMin, 'minute'];
   const diffHour = Math.floor(diffMin / 60);
@@ -437,13 +437,13 @@ function relativeTimeParts(createdAt) {
 }
 
 function shortAgeLabel(createdAt) {
-  const parts = relativeTimeParts(createdAt);
-  return parts ? `${parts[0]} ${SHORT_UNITS[parts[1]]}` : 'сейчас';
+  const [value, unit] = relativeTimeParts(createdAt);
+  return `${value} ${SHORT_UNITS[unit]}`;
 }
 
 function longAgeLabel(createdAt) {
-  const parts = relativeTimeParts(createdAt);
-  return parts ? rtf.format(-parts[0], parts[1]) : 'только что';
+  const [value, unit] = relativeTimeParts(createdAt);
+  return rtf.format(-value, unit);
 }
 
 // { btn, item, thumbCanvas } for the strip's current buttons, kept
@@ -491,7 +491,8 @@ function renderPatternHistory() {
 }
 
 renderPatternHistory();
-setInterval(updatePatternTimes, 30000);
+// Every second, so the first minute counts up in seconds.
+setInterval(updatePatternTimes, 1000);
 
 // --- Grain layer ----------------------------------------------------------
 
