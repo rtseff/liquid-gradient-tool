@@ -267,7 +267,7 @@ input {
 }
 
 .pattern-new:hover,
-.add-color:hover:not(:disabled),
+.add-color:hover,
 .size-preset-btn:hover,
 .cancel-export-btn:hover,
 .result-download:hover {
@@ -448,11 +448,6 @@ input[type='color']::-moz-color-swatch {
   width: 100%;
   height: 36px;
   padding: 0 16px;
-}
-
-.add-color:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* --- Sliders ------------------------------------------------------------ */
@@ -1339,8 +1334,11 @@ select option {
 .gallery-scroll::after {
   content: '';
   position: absolute;
-  top: 0;
-  bottom: 0;
+  /* -4px: .results below spills 4px past this box on every side (room
+     for focus rings), so the fades must cover that strip too or cards
+     show through at the very edge. */
+  top: -4px;
+  bottom: -4px;
   z-index: 1;
   width: min(174px, 15%); /* about one card */
   pointer-events: none;
@@ -1349,12 +1347,12 @@ select option {
 }
 
 .gallery-scroll::before {
-  left: 0;
+  left: -4px;
   background: linear-gradient(to left, rgba(10, 10, 10, 0), var(--background));
 }
 
 .gallery-scroll::after {
-  right: 0;
+  right: -4px;
   background: linear-gradient(to right, rgba(10, 10, 10, 0), var(--background));
 }
 

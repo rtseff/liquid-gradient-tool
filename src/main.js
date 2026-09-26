@@ -243,7 +243,6 @@ const el = {
   colorList: document.getElementById('colorList'),
   colorCount: document.getElementById('colorCount'),
   addColorBtn: document.getElementById('addColorBtn'),
-  addColorLabel: document.getElementById('addColorLabel'),
   undoColorBtn: document.getElementById('undoColorBtn'),
   redoColorBtn: document.getElementById('redoColorBtn'),
   newPatternBtn: document.getElementById('newPatternBtn'),
@@ -483,9 +482,13 @@ function renderColorList() {
     el.colorList.appendChild(node);
   });
 
+  // At the limit the button is hidden (the header's "6/6" says why); if
+  // it had focus, hand that to the newest row instead of losing it to
+  // <body>.
   const full = state.colors.length >= MAX_COLORS;
-  el.addColorBtn.disabled = full;
-  el.addColorLabel.textContent = full ? `Максимум ${MAX_COLORS} цветов` : '+ Добавить цвет';
+  const hadFocus = document.activeElement === el.addColorBtn;
+  el.addColorBtn.hidden = full;
+  if (full && hadFocus) el.colorList.lastElementChild?.querySelector('.color-hex')?.focus();
   el.colorCount.textContent = `${state.colors.length}/${MAX_COLORS}`;
   updatePresetActive();
 }
