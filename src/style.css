@@ -738,7 +738,7 @@ select option {
   /* Height of the pattern-history strip pinned at the bottom, so
      .canvas-box (below) can reserve room for it instead of the canvas
      sitting underneath it. Bumped on the short mobile layout below. */
-  --pattern-strip-h: 90px;
+  --pattern-strip-h: 76px;
   /* The strip's own item size reacts to how much width .canvas-wrap
      actually has (not the viewport), since at some viewports it's the
      narrower of several grid columns. */
@@ -804,16 +804,22 @@ select option {
 
 /* --- Pattern history ------------------------------------------------- */
 
-/* "Новый узор" on the left, then the history strip — a popover-style
-   floating toolbar (bg-popover, border, rounded-lg, shadow-md). */
+/* A floating toolbar (popover look: bg-popover, border, rounded-lg,
+   shadow-md): "Новый узор", a vertical separator, then the history.
+   Everything in the row is the same height (--pattern-item-h) and
+   vertically centered; the age sits on the thumbnail as a chip, so no
+   caption row hangs below the thumbnails. */
 .pattern-bar {
+  --pattern-item-w: 72px;
+  --pattern-item-h: 48px;
+  --pattern-gap: 8px;
   position: absolute;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: var(--pattern-gap);
   padding: 8px;
   max-width: calc(100% - 32px);
   border: 1px solid var(--border);
@@ -825,8 +831,8 @@ select option {
 .pattern-new {
   flex: none;
   gap: 6px;
-  height: 48px;
-  padding: 0 12px;
+  height: var(--pattern-item-h);
+  padding: 0 14px;
 }
 
 .pattern-new > [aria-hidden] {
@@ -834,10 +840,24 @@ select option {
   line-height: 1;
 }
 
+/* Separator, orientation "vertical": w-px bg-border. */
+.pattern-sep {
+  flex: none;
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
 .pattern-history {
   display: flex;
-  gap: 8px;
+  gap: var(--pattern-gap);
   min-width: 0;
+  /* 4px of room inside the scroller for the active/hover rings (2px gap
+     + 2px ring), which overflow-x would otherwise clip; the negative
+     margin keeps the bar's own size unchanged. */
+  padding: 4px;
+  margin: -4px;
   /* Safety net only: the container query below sizes items to fit
      without scrolling at every layout width we support, same as
      .results hides its scrollbar because main.js drives that one by
@@ -851,25 +871,22 @@ select option {
 }
 
 /* Wraps .pattern-item so the pin button (below) can sit over its
-   thumbnail corner without nesting a <button> inside a <button>. Carries
-   the width .pattern-item itself used to own; .pattern-item just fills it. */
+   thumbnail corner without nesting a <button> inside a <button>. */
 .pattern-slot {
   position: relative;
   flex: none;
-  width: 72px;
+  width: var(--pattern-item-w);
+  height: var(--pattern-item-h);
 }
 
 .pattern-item {
-  display: flex;
-  flex-direction: column;
-  /* Stretch (not center) so .pattern-time below can go width: 100% and
-     truncate with an ellipsis instead of growing the button to fit its
-     label — otherwise longer labels ("21 ч. назад") made the row uneven. */
-  align-items: stretch;
-  gap: 4px;
+  position: relative;
+  display: block;
   width: 100%;
+  height: 100%;
   padding: 0;
   border: none;
+  border-radius: var(--radius-md);
   background: none;
   font: inherit;
   cursor: pointer;
@@ -877,44 +894,59 @@ select option {
 
 .pattern-thumb {
   display: block;
-  width: 72px;
-  height: 48px;
+  width: 100%;
+  height: 100%;
   border-radius: var(--radius-md);
   border: 1px solid var(--control-border);
   background: var(--card);
   object-fit: cover;
+  transition: box-shadow 0.15s;
 }
 
+/* Ring drawn with box-shadow (2px card-colored gap, then 2px ring) so
+   it follows the rounded corners and fits the scroller's 4px padding. */
 .pattern-item:hover .pattern-thumb {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--popover), 0 0 0 4px var(--ring);
 }
 
 .pattern-item[aria-pressed='true'] .pattern-thumb {
-  outline: 2px solid var(--foreground);
-  outline-offset: 2px;
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--popover), 0 0 0 4px var(--foreground);
 }
 
 .pattern-item:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-  border-radius: var(--radius-lg);
+  outline: none;
 }
 
+.pattern-item:focus-visible .pattern-thumb {
+  box-shadow: 0 0 0 2px var(--popover), 0 0 0 4px var(--ring), 0 0 0 7px var(--ring-50);
+}
+
+.pattern-item[aria-pressed='true']:focus-visible .pattern-thumb {
+  box-shadow: 0 0 0 2px var(--popover), 0 0 0 4px var(--foreground), 0 0 0 7px var(--ring-50);
+}
+
+/* Age chip over the thumbnail's bottom edge. White on black/65% stays
+   ≥ 7:1 even over a white thumbnail (the chip composites to #595959 or
+   darker). */
 .pattern-time {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 6px);
   overflow: hidden;
-  width: 100%;
-  font-size: 12px;
-  line-height: 1.2;
-  color: var(--muted-foreground);
-  text-align: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-.pattern-item[aria-pressed='true'] .pattern-time {
-  color: var(--foreground);
+  pointer-events: none;
 }
 
 /* Pin toggle, layered over the thumbnail's top-right corner. Hidden
@@ -924,12 +956,12 @@ select option {
    color, not just flat ones. */
 /* WCAG 2.5.8 target-size: the button's own box (what axe-core and the
    browser's hit-testing both use) is the full >=24x24 CSS px target;
-   the 20px (16px at the narrower breakpoints below) circle stays its
-   original visual size and position via ::before, inset from that box.
-   A ::before that only enlarges the box visually (e.g. via negative
-   inset) does NOT work here: axe-core's target-size check — and a
-   browser's actual hit target — is the interactive element's own
-   boundingClientRect, not a pseudo-element that merely overflows it. */
+   the 20px (16px in the compact size below) circle stays its visual
+   size via ::before, inset from that box. A ::before that only
+   enlarges the box visually (e.g. via negative inset) does NOT work
+   here: axe-core's target-size check — and a browser's actual hit
+   target — is the interactive element's own boundingClientRect, not a
+   pseudo-element that merely overflows it. */
 .pattern-pin {
   position: absolute;
   top: 0;
@@ -974,36 +1006,26 @@ select option {
   cursor: not-allowed;
 }
 
-/* Below this, 5 full-size (72px) items don't fit .canvas-wrap's own
-   width without scrolling (measured: overflow from ~1024px up to
-   ~1700px of viewport width, where .canvas-wrap is the narrow column of
-   a wider multi-column grid) — shrink the strip's items instead. */
+/* Compact size, shared by the container query (5 full-size items don't
+   fit .canvas-wrap's own width below ~700px: measured overflow from
+   ~1024px up to ~1700px of viewport width, where .canvas-wrap is the
+   narrow column of a wider grid) and the one-column layout below. */
 @container (max-width: 700px) {
   .pattern-bar {
-    gap: 6px;
+    --pattern-item-w: 60px;
+    --pattern-item-h: 40px;
+    --pattern-gap: 6px;
     padding: 6px;
   }
 
-  .pattern-history {
-    gap: 6px;
-  }
-
   .pattern-new {
-    height: 32px;
-    padding: 0 10px;
-  }
-
-  .pattern-slot {
-    width: 48px;
-  }
-
-  .pattern-thumb {
-    width: 48px;
-    height: 32px;
+    padding: 0 12px;
   }
 
   .pattern-time {
-    font-size: 11px;
+    bottom: 2px;
+    padding: 0 5px;
+    font-size: 10px;
   }
 
   .pattern-pin {
@@ -1020,6 +1042,11 @@ select option {
 /* Too narrow for the label next to five items: keep just the ↻ glyph
    (the button's accessible name still comes from the hidden text). */
 @container (max-width: 460px) {
+  .pattern-new {
+    width: var(--pattern-item-h);
+    padding: 0;
+  }
+
   .pattern-new-label {
     position: absolute;
     width: 1px;
@@ -1439,49 +1466,36 @@ select option {
     height: 34vh;
     min-height: 180px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-    /* Own height is short here (34vh, min 180px), so the strip is kept
-       to the same small size the container query below 700px already
-       uses, and this taller value leaves a real gap above it instead of
-       the canvas touching the strip. */
-    --pattern-strip-h: 96px;
+    /* Own height is short here (34vh, min 180px), so the strip uses the
+       compact size (54px bar + 10px offset); this leaves an 8px+ gap
+       above it instead of the canvas touching the strip. */
+    --pattern-strip-h: 64px;
   }
 
   .pattern-bar {
+    --pattern-item-w: 60px;
+    --pattern-item-h: 40px;
+    --pattern-gap: 6px;
     bottom: 10px;
-    gap: 6px;
     padding: 6px;
   }
 
-  .pattern-history {
-    gap: 6px;
-  }
-
   .pattern-new {
-    height: 32px;
-    padding: 0 10px;
-  }
-
-  .pattern-slot {
-    width: 48px;
-  }
-
-  .pattern-thumb {
-    width: 48px;
-    height: 32px;
+    padding: 0 12px;
   }
 
   .pattern-time {
-    font-size: 11px;
+    bottom: 2px;
+    padding: 0 5px;
+    font-size: 10px;
   }
 
   .pattern-pin {
-    /* Box stays 24x24 (the target-size hit area); only the visible
-       circle below shrinks to 16x16. */
     font-size: 10px;
   }
 
   .pattern-pin::before {
-    inset: 4px; /* 24px - 2*4px = 16px */
+    inset: 4px;
   }
 }
 

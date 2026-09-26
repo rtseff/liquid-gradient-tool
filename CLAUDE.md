@@ -161,8 +161,13 @@ for exactly that reason.
   than 4 pins. `.pattern-pin` is a 24×24 hit target (WCAG 2.2 target
   size) with a smaller visible disc drawn by `::before` at `z-index: -1`;
   the button's own `z-index: 1` keeps that disc above the thumbnail. On load the current
-  seed is added if missing, so the strip is never empty. Labels: a
-  bare age on screen ("42 с", "3 мин", fits 48px items), the full
+  seed is added if missing, so the strip is never empty. Layout: one
+  row, everything the same height (`--pattern-item-h`, 48px; 40px in
+  the compact size used below a 700px-wide preview and in the
+  one-column layout), button | `.pattern-sep` | history; rings are
+  box-shadows inside the history's 4px padding so overflow doesn't clip
+  them. Labels: a bare age as a chip over the thumbnail's bottom edge
+  ("42 с", "3 мин"), the full
   `Intl.RelativeTimeFormat('ru')` phrase in title/aria-label; refreshed
   every second so the first minute counts up. Thumbnails are
   rendered on the shared WebGL canvas inside `previewLoop`'s
