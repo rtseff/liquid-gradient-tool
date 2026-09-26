@@ -1,7 +1,6 @@
 import { LiquidGradientRenderer } from './render/LiquidGradientRenderer.js';
 import { exportVideo } from './export/exportVideo.js';
 import { exportGif } from './export/exportGif.js';
-import { PRESETS, presetGradientCss } from './presets.js';
 import {
   loadSettings,
   saveSettings,
@@ -61,7 +60,7 @@ const canvas = document.getElementById('previewCanvas');
 const renderer = new LiquidGradientRenderer(canvas);
 
 const state = {
-  colors: [...PRESETS[0].colors],
+  colors: ['#04120f', '#022a22', '#0bbf96', '#8bf5d6'],
   scale: 1.3,
   warp: 0.9,
   softness: 0.3,
@@ -238,8 +237,6 @@ function gifSize(source = state) {
 // --- DOM refs -------------------------------------------------------------
 
 const el = {
-  presetList: document.getElementById('presetList'),
-  presetToggle: document.getElementById('presetToggle'),
   colorList: document.getElementById('colorList'),
   colorCount: document.getElementById('colorCount'),
   addColorBtn: document.getElementById('addColorBtn'),
@@ -336,40 +333,6 @@ async function copySettingsLink(btn) {
   }
 }
 
-// --- Presets ---------------------------------------------------------------
-
-const presetButtons = PRESETS.map((preset) => {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'preset-swatch';
-  btn.style.background = presetGradientCss(preset.colors);
-  btn.title = preset.name;
-  btn.setAttribute('aria-pressed', 'false');
-  const label = document.createElement('span');
-  label.textContent = preset.name;
-  btn.appendChild(label);
-  btn.addEventListener('click', () => {
-    state.colors = [...preset.colors];
-    pushColorHistory();
-    renderColorList();
-  });
-  el.presetList.appendChild(btn);
-  return { btn, colors: preset.colors };
-});
-
-el.presetToggle.addEventListener('click', () => {
-  const open = el.presetList.hidden;
-  el.presetList.hidden = !open;
-  el.presetToggle.setAttribute('aria-expanded', String(open));
-});
-
-function updatePresetActive() {
-  const current = state.colors.join(',');
-  presetButtons.forEach(({ btn, colors }) => {
-    btn.setAttribute('aria-pressed', String(colors.join(',') === current));
-  });
-}
-
 // --- Colors ------------------------------------------------------------
 //
 // Every add/remove/edit/reorder of the palette is pushed onto an
@@ -391,7 +354,6 @@ function pushColorHistory() {
   colorHistory.push([...state.colors]);
   colorHistoryIndex++;
   updateHistoryButtons();
-  updatePresetActive();
 }
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
@@ -490,7 +452,6 @@ function renderColorList() {
   el.addColorBtn.hidden = full;
   if (full && hadFocus) el.colorList.lastElementChild?.querySelector('.color-hex')?.focus();
   el.colorCount.textContent = `${state.colors.length}/${MAX_COLORS}`;
-  updatePresetActive();
 }
 
 el.addColorBtn.addEventListener('click', () => {

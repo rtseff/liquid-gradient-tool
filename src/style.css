@@ -210,14 +210,6 @@ input {
   color: var(--destructive);
 }
 
-.icon-btn-chevron {
-  transition: transform 0.15s, background-color 0.15s;
-}
-
-.icon-btn-chevron[aria-expanded='true'] {
-  transform: rotate(180deg);
-}
-
 /* Button, variant "link": text-primary underline-offset-4 hover:underline. */
 .text-btn {
   padding: 0;
@@ -290,50 +282,6 @@ input {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.preset-list {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.preset-swatch {
-  position: relative;
-  overflow: hidden;
-  height: 36px;
-  padding: 0;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--control-border);
-  cursor: pointer;
-}
-
-/* Dark chip behind the name: white straight on the light end of a
-   palette (e.g. #e0f2fe) is only ~1.2:1; on the chip it's ≥ 7.5:1. */
-.preset-swatch span {
-  position: absolute;
-  bottom: 3px;
-  left: 3px;
-  max-width: calc(100% - 6px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.65);
-  font-size: 11px;
-  font-weight: 500;
-  color: #fff;
-  white-space: nowrap;
-}
-
-.preset-swatch:hover {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-.preset-swatch[aria-pressed='true'] {
-  outline: 2px solid var(--foreground);
-  outline-offset: 2px;
 }
 
 .color-list {

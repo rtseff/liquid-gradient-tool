@@ -337,10 +337,8 @@ for exactly that reason.
   (white 10%) is only for cards. shadcn's 3px `ring-ring/50` focus ring
   is kept, but always together with a `--ring` border or a solid 2px
   `--ring` outline, since the translucent ring alone is ~1.9:1. Check with axe-core (`npm pack axe-core`, inject `axe.min.js`,
-  `axe.run` with the wcag2aa/wcag22aa tags) — it can't judge text over
-  the preset gradients or single-glyph icons, so compute those by hand.
-- **`src/presets.js`** — static palette data plus `presetGradientCss()`
-  for the swatch UI. No other state.
+  `axe.run` with the wcag2aa/wcag22aa tags) — it can't judge
+  single-glyph icons, so compute those by hand.
 - **`vendor/`** — runtime dependencies checked into the repo instead of
   fetched from a CDN or installed via npm (there is no `node_modules`):
   - `vendor/webgl-noise/simplex4d.glsl` — reference copy of the
@@ -412,7 +410,10 @@ cell centres read as a visible grid).
 The output is always a full-frame rectangle. Masks (a circle mask, and
 before it custom image masks) and a "glass" sphere-lighting mode
 existed at some point and were removed at the user's request — don't
-reintroduce them unless asked.
+reintroduce them unless asked. The same goes for palette presets (the
+"▾" list of named palettes in the colors card and `src/presets.js`):
+removed at the user's request; the default palette is now inlined in
+`state.colors` in `main.js`.
 
 ### Slider semantics worth knowing
 
