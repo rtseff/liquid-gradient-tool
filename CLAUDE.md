@@ -294,8 +294,21 @@ for exactly that reason.
   frame. It also sets `canvas.style.width/height` explicitly — otherwise
   `max-width/max-height: 100%` would size the canvas from its (now
   smaller) buffer. Exports and thumbnails set their own size as before.
+- **Visual style is shadcn/ui** (new-york-v4 components, neutral dark
+  theme), ported to plain CSS — there is no React/Tailwind here. The
+  `:root` tokens in `style.css` are shadcn's `.dark` values
+  (`apps/v4/app/globals.css` in shadcn-ui/ui) converted from oklch to
+  hex (`--background`, `--card`, `--primary`, `--muted-foreground`, …,
+  radii `--radius-sm/md/lg/xl` = 6/8/10/14px), and each component block
+  names the shadcn component whose Tailwind classes it mirrors (Button
+  outline/ghost/link/default, Input, Select trigger, Slider, Switch,
+  Checkbox, ToggleGroup, Card, Badge, Progress). New controls should
+  reuse those blocks (e.g. add the class to the shared "outline" rule)
+  rather than invent a look. Native `<select>`s keep the OS list; only
+  the trigger is restyled, with a `▾` glyph via `.select-wrap::after`.
 - **UI layout** follows the Figma mock (file `crJpeY2AsxP794ZHPIIQwd`,
-  node `2001:115`; its colors are the tokens on `:root` in `style.css`).
+  node `2001:115`) for structure and sizes; its original colors were
+  replaced by the shadcn tokens above.
   `.layout` is one flat CSS grid with named areas: `.controls` (colors +
   flow cards side by side, grain card below, 568px) | `.canvas-wrap`
   preview | `.output` export card (332px), and the `.gallery` of
@@ -313,12 +326,17 @@ for exactly that reason.
   !important }` rule exists because component rules like
   `.field { display: flex }` otherwise override the `hidden` attribute.
 - **Color contrast (WCAG 2.2 AA)** is a requirement, not a nicety. Text
-  must be ≥ 4.5:1 on `--panel` *and* `--field`, so nothing dimmer than
-  `--text-muted` (#85828c, 4.54:1 on field) may be used for text — the
-  mock's #4d4a54 was 2.2:1. Boundaries of interactive controls (inputs,
-  selects, color rows, buttons, the empty part of slider tracks, the
-  switch) use `--control-border` (≥ 3:1, 1.4.11); `--border` is only for
-  cards. Check with axe-core (`npm pack axe-core`, inject `axe.min.js`,
+  must be ≥ 4.5:1 on `--card` *and* `--field` (#212121, the opaque
+  equivalent of shadcn's `bg-input/30` on the card), so nothing dimmer
+  than `--muted-foreground` (#a1a1a1, 6.2:1 on field) may be used for
+  text. Boundaries of interactive controls (inputs, selects, color rows,
+  buttons, the empty part of slider tracks, the switch, the checkbox)
+  use `--control-border` (#6e6e6e, 3.2:1 on field, 3.5:1 on card;
+  1.4.11) — this is the one deliberate deviation from shadcn, whose
+  `--input` (white 15%) and `--muted` track are ~1.3–1.6:1. `--border`
+  (white 10%) is only for cards. shadcn's 3px `ring-ring/50` focus ring
+  is kept, but always together with a `--ring` border or a solid 2px
+  `--ring` outline, since the translucent ring alone is ~1.9:1. Check with axe-core (`npm pack axe-core`, inject `axe.min.js`,
   `axe.run` with the wcag2aa/wcag22aa tags) — it can't judge text over
   the preset gradients or single-glyph icons, so compute those by hand.
 - **`src/presets.js`** — static palette data plus `presetGradientCss()`
