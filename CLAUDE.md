@@ -311,6 +311,28 @@ for exactly that reason.
   reuse those blocks (e.g. add the class to the shared "outline" rule)
   rather than invent a look. Native `<select>`s keep the OS list; only
   the trigger is restyled, with a `▾` glyph via `.select-wrap::after`.
+- **Control shapes/UX follow a reference video the user supplied** (a
+  macOS lights menu-bar panel), colors unchanged: cards 20px
+  (`--radius-card`), every control a full pill (`--radius-pill`), filled
+  `--secondary` pills for secondary buttons, card titles with muted
+  secondary text (`.card-meta`, "Цвета  4 из 6"). **Sliders**: markup is
+  `.slider > .slider-control > input[type=range] + .slider-track >
+  .slider-name + output`. The native input lies on top, `opacity: 0`,
+  and still does all input (keyboard, dblclick reset, a11y); the track is
+  drawn from `--f` (0..1) that `bindRange()` sets on `.slider`: a lighter
+  rounded fill, a 3px white handle at `12px + f × (width − 24px)` —
+  exactly where the 24px-wide invisible native thumb maps the value, so
+  clicks land where the handle is — which bends into a bracket against
+  the round end at min/max (`data-edge`), and fades (`.handle-dim`)
+  while under the name or value. Name (left) and value (right) are
+  inside the track, 13px, `--control-text` (#b4b4b4: 7.3:1 on the track,
+  ≥ 4.7:1 on the fill even hovered — keep the fill ≤ 14% white or
+  recheck); `bindRange()` caps the name's `max-width` at the room left
+  of the value. Values "roll" per changed character (`setRollingText`,
+  off under `prefers-reduced-motion`). Width/height use the same idea:
+  `.input-group` pills with the name inside. The export button shows
+  only "Экспорт <format>" — the size/weight summary line was removed at
+  the user's request.
 - **UI layout** follows the Figma mock (file `crJpeY2AsxP794ZHPIIQwd`,
   node `2001:115`) for structure and sizes; its original colors were
   replaced by the shadcn tokens above.
@@ -321,8 +343,7 @@ for exactly that reason.
   card moves under the preview; ≤1023px it's one column with the preview
   sticky on top. The canvas sits in an absolutely positioned
   `.canvas-box` so its intrinsic size (the export size) never stretches
-  the grid row. Sliders are restyled native ranges: `bindRange()` writes
-  the `--fill` percentage the WebKit track gradient uses. Icons are text
+  the grid row. Sliders: see "Control shapes/UX" above. Icons are text
   glyphs (↶ ↷ ▾ ⠿ ✕ ↻) on purpose — the user asked to keep them rather
   than the mock's icon set. The gallery strip hides its scrollbar, so
   `main.js` maps a vertical mouse wheel to horizontal scroll (handing it

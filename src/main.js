@@ -286,7 +286,6 @@ const el = {
   poster: document.getElementById('poster'),
   exportBtn: document.getElementById('exportBtn'),
   exportLabel: document.getElementById('exportLabel'),
-  exportMeta: document.getElementById('exportMeta'),
   formatHint: document.getElementById('formatHint'),
   copySettingsLinkBtn: document.getElementById('copySettingsLinkBtn'),
   exportProgress: document.getElementById('exportProgress'),
@@ -451,7 +450,7 @@ function renderColorList() {
   const hadFocus = document.activeElement === el.addColorBtn;
   el.addColorBtn.hidden = full;
   if (full && hadFocus) el.colorList.lastElementChild?.querySelector('.color-hex')?.focus();
-  el.colorCount.textContent = `${state.colors.length}/${MAX_COLORS}`;
+  el.colorCount.textContent = `${state.colors.length} из ${MAX_COLORS}`;
 }
 
 el.addColorBtn.addEventListener('click', () => {
@@ -514,20 +513,70 @@ updateHistoryButtons();
 // history entry) can move the slider with it.
 const rangeAppliers = {};
 
+// The value readout inside a slider track. Characters that changed since
+// the last value are wrapped in spans that roll in from above (value went
+// up) or below (down) — the "odometer" effect from the reference video.
+// Unchanged characters stay plain text so they don't flicker.
+function setRollingText(output, text, direction) {
+  const previous = output.dataset.text ?? '';
+  output.dataset.text = text;
+  if (!previous || previous.length !== text.length || !direction) {
+    output.textContent = text;
+    return;
+  }
+  output.textContent = '';
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === previous[i]) {
+      output.append(text[i]);
+    } else {
+      const span = document.createElement('span');
+      span.className = direction > 0 ? 'roll-up' : 'roll-down';
+      span.textContent = text[i];
+      output.append(span);
+    }
+  }
+}
+
+// Sliders are drawn by .slider-track (style.css); the native range input
+// sits on top of it, transparent, so keyboard, dblclick-reset and
+// assistive tech behave exactly as before. The track reads its position
+// from --f (0..1) on .slider; data-edge bends the handle into a bracket
+// against the track's rounded end. The name (left) and value (right) sit
+// inside the track above the handle; .handle-dim fades the handle while
+// it passes under either of them so it doesn't merge with the letters.
 function bindRange(input, output, key, format = (v) => v.toFixed(2), onChange) {
   const defaultValue = DEFAULTS[key];
   const min = parseFloat(input.min);
   const max = parseFloat(input.max);
+  const slider = input.closest('.slider');
+  const track = slider.querySelector('.slider-track');
+  const name = slider.querySelector('.slider-name');
+  let last = state[key];
+  const layout = () => {
+    const f = parseFloat(slider.style.getPropertyValue('--f')) || 0;
+    // Handle centre, mirroring the CSS calc (12px + f × (width − 24px)).
+    const width = track.clientWidth;
+    const handleX = 12 + f * (width - 24);
+    // The name may use everything up to 10px before the value.
+    name.style.maxWidth = `${Math.max(0, width - 28 - output.offsetWidth - 10)}px`;
+    const underName = handleX < name.offsetLeft + name.offsetWidth + 4;
+    const underValue = handleX > width - 14 - output.offsetWidth - 4;
+    slider.classList.toggle('handle-dim', underName || underValue);
+  };
   const apply = (value) => {
     state[key] = value;
     input.value = value;
-    // Accent part of the track, up to the thumb (see style.css).
-    input.style.setProperty('--fill', `${((value - min) / (max - min)) * 100}%`);
-    output.textContent = format(value);
+    const f = (value - min) / (max - min);
+    slider.style.setProperty('--f', String(f));
+    slider.dataset.edge = value <= min ? 'min' : value >= max ? 'max' : '';
+    setRollingText(output, format(value), Math.sign(value - last));
+    last = value;
+    layout();
     onChange?.();
   };
   apply(state[key]);
   rangeAppliers[key] = apply;
+  new ResizeObserver(layout).observe(track);
   input.title = 'Двойной клик — значение по умолчанию';
   input.addEventListener('input', () => apply(parseFloat(input.value)));
   input.addEventListener('dblclick', () => apply(defaultValue));
@@ -756,25 +805,13 @@ function videoContainers(format = state.format) {
 }
 
 function updateOutputMeta() {
-  const containers = videoContainers();
   const isGif = state.format === 'gif';
   el.bitrateField.hidden = isGif;
   el.gifWidthField.hidden = !isGif;
   el.posterField.hidden = isGif;
 
+  // Just "Экспорт <format>" — the user asked for no summary line here.
   el.exportLabel.textContent = `Экспорт ${FORMAT_LABELS[state.format]}`;
-  const seconds = `${state.duration.toFixed(1)} с`;
-  if (isGif) {
-    const gif = gifSize();
-    el.exportMeta.textContent = `${gif.width}×${gif.height} - ${seconds} - ${Math.min(state.fps, 30)} fps`;
-  } else {
-    // Target bitrate × duration; real VP9/H.264 output of a slow gradient
-    // usually lands at or below this.
-    const approxBytes = (state.bitrate * 1e6 * state.duration) / 8;
-    const perFile = containers.length > 1 ? ' на файл' : '';
-    el.exportMeta.textContent =
-      `${state.width}×${state.height} - ${seconds} - ${state.fps} fps - ~${formatBytes(approxBytes)}${perFile}`;
-  }
 
   el.formatHint.textContent = FORMAT_HINTS[state.format];
 }

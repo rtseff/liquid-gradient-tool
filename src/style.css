@@ -18,6 +18,9 @@
   --radius-md: 8px; /* radius × 0.8 */
   --radius-lg: 10px; /* radius */
   --radius-xl: 14px; /* radius × 1.4 */
+  /* Reference-video shapes: cards 20px, every control a full pill. */
+  --radius-card: 20px;
+  --radius-pill: 999px;
 
   --background: #0a0a0a; /* oklch(0.145 0 0) */
   --foreground: #fafafa; /* oklch(0.985 0 0) */
@@ -43,6 +46,10 @@
      places that need an opaque fill. */
   --field: #212121;
   --control-border: #6e6e6e;
+  /* Grey for text inside controls (slider/field names and values):
+     7.3:1 on --secondary, ≥ 4.7:1 on the slider fill even when hovered
+     (#3e3e3e / #454545). */
+  --control-text: #b4b4b4;
 
   /* Tailwind shadow scale */
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -133,7 +140,7 @@ input {
   background: var(--card);
   color: var(--foreground);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-sm);
   padding: 24px;
   min-width: 0;
@@ -156,6 +163,15 @@ input {
   letter-spacing: -0.01em;
 }
 
+/* Secondary text next to a title ("Цвета  4 из 6"), like "All lights
+   ˅ Office" in the reference. */
+.card-meta {
+  margin-left: 6px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
 .header-actions {
   display: flex;
   gap: 2px;
@@ -172,7 +188,7 @@ input {
   height: 32px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: none;
   color: var(--foreground);
   font-size: 16px;
@@ -247,8 +263,8 @@ input {
   justify-content: center;
   gap: 8px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-md);
-  background: var(--input-30);
+  border-radius: var(--radius-pill);
+  background: var(--secondary);
   box-shadow: var(--shadow-xs);
   color: var(--foreground);
   font-size: 14px;
@@ -263,7 +279,7 @@ input {
 .size-preset-btn:hover,
 .cancel-export-btn:hover,
 .result-download:hover {
-  background: var(--input-50);
+  background: var(--accent);
 }
 
 .pattern-new:focus-visible,
@@ -296,11 +312,11 @@ input {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 36px;
-  padding: 0 10px;
-  background: var(--input-30);
+  min-height: 40px;
+  padding: 0 8px 0 14px;
+  background: var(--secondary);
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   box-shadow: var(--shadow-xs);
   transition: opacity 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
@@ -344,7 +360,7 @@ input[type='color'] {
   flex: none;
   padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: none;
   cursor: pointer;
 }
@@ -357,12 +373,12 @@ input[type='color']::-webkit-color-swatch-wrapper {
    visible as a control. */
 input[type='color']::-webkit-color-swatch {
   border: 1px solid var(--control-border);
-  border-radius: 4px;
+  border-radius: 50%;
 }
 
 input[type='color']::-moz-color-swatch {
   border: 1px solid var(--control-border);
-  border-radius: 4px;
+  border-radius: 50%;
 }
 
 .color-hex {
@@ -394,11 +410,20 @@ input[type='color']::-moz-color-swatch {
 
 .add-color {
   width: 100%;
-  height: 36px;
+  height: 40px;
   padding: 0 16px;
 }
 
-/* --- Sliders ------------------------------------------------------------ */
+/* --- Sliders ------------------------------------------------------------
+   Pill sliders after the reference video: a rounded track with a lighter
+   rounded fill, a thin white handle just past the fill that bends into a
+   bracket against the track's round end at min/max, and the name (left)
+   and value (right) inside the track, above the handle (which dims while
+   it passes under either — .handle-dim, set in bindRange()). The native range input
+   lies on top, transparent, and keeps doing all input handling; the
+   visuals read --f (0..1) from .slider. Handle centre = 12px + f × (width
+   − 24px), which is exactly where the 24px-wide native thumb maps the
+   value, so a click lands where the handle is drawn. */
 
 .controls-row > .card:last-child,
 .grain-main {
@@ -410,126 +435,202 @@ input[type='color']::-moz-color-swatch {
 .sliders {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .slider {
+  --slider-h: 40px;
+  --f: 0.5;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-/* Label: text-sm font-medium leading-none; the value sits on the right
-   in muted-foreground, as in shadcn's slider examples. */
-.slider-labels {
-  display: flex;
-  justify-content: space-between;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--foreground);
-  white-space: nowrap;
 }
 
 .slider-compact {
-  gap: 8px;
+  --slider-h: 36px;
 }
 
-output {
-  color: var(--muted-foreground);
-  font-weight: 400;
+
+.slider-control {
+  position: relative;
+  display: block;
+  height: var(--slider-h);
+}
+
+/* Track boundary uses --control-border (3:1 on the card, 1.4.11). */
+.slider-track {
+  position: absolute;
+  inset: 0;
+  z-index: 0; /* own stacking context: fill (-1) under text, handle over */
+  display: block;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--secondary);
+  pointer-events: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+/* Fill: a pill inset 3px from the track, ending 7px before the handle. */
+.slider-track::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  z-index: -1;
+  width: max(0px, calc(2px + var(--f) * (100% - 24px)));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
+  transition: width 0.08s ease-out, background-color 0.15s;
+}
+
+/* Handle: 3px white bar, 50% of the track's height; under the text. */
+.slider-track::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: calc(12px + var(--f) * (100% - 24px));
+  width: 3px;
+  height: 50%;
+  border: 0 solid #fff;
+  border-radius: 2px;
+  background: #fff;
+  transform: translate(-50%, -50%);
+  transition: left 0.08s ease-out, height 0.15s, width 0.15s, border-radius 0.15s, background-color 0.15s, opacity 0.15s;
+}
+
+.slider.handle-dim .slider-track::after {
+  opacity: 0.35;
+}
+
+/* At an end the bar becomes a bracket hugging the round end: ( or ). */
+.slider[data-edge='max'] .slider-track::after,
+.slider[data-edge='min'] .slider-track::after {
+  width: 8px;
+  height: 56%;
+  background: transparent;
+}
+
+.slider[data-edge='max'] .slider-track::after {
+  border-right-width: 3px;
+  border-radius: 0 999px 999px 0;
+}
+
+.slider[data-edge='min'] .slider-track::after {
+  border-left-width: 3px;
+  border-radius: 999px 0 0 999px;
+}
+
+.slider-control:hover .slider-track::before {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Grabbed: the handle stretches, like the reference. */
+.slider-control:active .slider-track::after {
+  height: 68%;
+}
+
+.slider-control:has(input:focus-visible) .slider-track {
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring);
+}
+
+.slider-name,
+.slider-track output {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  transform: translateY(-50%);
+  color: var(--control-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Name left, value right, same type — like the value readout in the
+   reference. The name truncates rather than running into the value. */
+.slider-name {
+  left: 14px;
+  overflow: hidden; /* max-width set by bindRange(), from the value's width */
+  text-overflow: ellipsis;
+  padding-bottom: 1px; /* keeps descenders (у, д) inside the clip */
+}
+
+.slider-track output {
+  right: 14px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.range-legend {
-  display: flex;
-  justify-content: space-between;
-  margin-top: -6px;
-  font-size: 12px;
-  color: var(--muted-foreground);
+/* Odometer: changed characters roll in (setRollingText in main.js). */
+.slider-track output span {
+  display: inline-block;
 }
 
-/* Slider: 6px rounded-full track, bg-primary range up to the thumb
-   (--fill is set from JS in bindRange), 16px white thumb with a
-   primary border, shadow-sm and a 4px ring-ring/50 on hover/focus.
-   24px hit area. The empty part of the track uses --control-border,
-   not --muted, to stay at 3:1 on the card. */
+.slider-track output .roll-up {
+  animation: roll-up 0.22s ease-out;
+}
+
+.slider-track output .roll-down {
+  animation: roll-down 0.22s ease-out;
+}
+
+@keyframes roll-up {
+  from { transform: translateY(45%); opacity: 0.2; filter: blur(2px); }
+}
+
+@keyframes roll-down {
+  from { transform: translateY(-45%); opacity: 0.2; filter: blur(2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slider-track::before,
+  .slider-track::after {
+    transition: none;
+  }
+
+  .slider-track output .roll-up,
+  .slider-track output .roll-down {
+    animation: none;
+  }
+}
+
+/* The real input: full-size, invisible, on top. */
 input[type='range'] {
-  --fill: 50%;
   -webkit-appearance: none;
   appearance: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   width: 100%;
-  height: 24px;
+  height: 100%;
   margin: 0;
   background: transparent;
+  opacity: 0;
   cursor: pointer;
 }
 
-input[type='range']:focus-visible {
-  outline: none;
-}
-
 input[type='range']::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(var(--primary), var(--primary)) 0 / var(--fill) 100% no-repeat, var(--control-border);
-}
-
-input[type='range']::-moz-range-track {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--control-border);
-}
-
-input[type='range']::-moz-range-progress {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--primary);
+  height: 100%;
 }
 
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
-  margin-top: -5px;
-  border: 1px solid var(--primary);
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.15s;
+  width: 24px;
+  height: 100%;
+}
+
+input[type='range']::-moz-range-track {
+  height: 100%;
 }
 
 input[type='range']::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  box-sizing: border-box;
-  border: 1px solid var(--primary);
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.15s;
-}
-
-input[type='range']:hover:not(:disabled)::-webkit-slider-thumb,
-input[type='range']:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 4px var(--ring-50);
-}
-
-input[type='range']:hover:not(:disabled)::-moz-range-thumb,
-input[type='range']:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 4px var(--ring-50);
-}
-
-/* ring-ring/50 alone is ~1.9:1 on the card; a solid ring on keyboard
-   focus keeps the focused slider identifiable. */
-input[type='range']:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ring);
-}
-
-input[type='range']:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ring);
+  width: 24px;
+  height: 100%;
+  border: 0;
 }
 
 input[type='range']:disabled {
@@ -538,6 +639,14 @@ input[type='range']:disabled {
 
 .slider.is-disabled {
   opacity: 0.5;
+}
+
+.range-legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -2px;
+  font-size: 12px;
+  color: var(--muted-foreground);
 }
 
 /* --- Grain card --------------------------------------------------------- */
@@ -646,11 +755,11 @@ input[type='range']:disabled {
 .input,
 select {
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
+  height: 40px;
+  padding: 0 16px;
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-md);
-  background: var(--input-30);
+  border-radius: var(--radius-pill);
+  background: var(--secondary);
   box-shadow: var(--shadow-xs);
   color: var(--foreground);
   font-size: 14px;
@@ -680,7 +789,7 @@ select:focus-visible {
   content: '▾';
   position: absolute;
   top: 50%;
-  right: 12px;
+  right: 16px;
   transform: translateY(-50%);
   font-size: 12px;
   line-height: 1;
@@ -691,12 +800,12 @@ select:focus-visible {
 select {
   -webkit-appearance: none;
   appearance: none;
-  padding: 0 32px 0 12px;
+  padding: 0 36px 0 16px;
   cursor: pointer;
 }
 
 select:hover:not(:disabled) {
-  background: var(--input-50);
+  background: var(--accent);
 }
 
 select:disabled {
@@ -732,7 +841,7 @@ select option {
   min-height: 701px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   /* Height of the pattern-history strip pinned at the bottom, so
@@ -810,7 +919,7 @@ select option {
    vertically centered; the age sits on the thumbnail as a chip, so no
    caption row hangs below the thumbnails. */
 .pattern-bar {
-  --pattern-item-w: 72px;
+  --pattern-item-w: 88px;
   --pattern-item-h: 48px;
   --pattern-gap: 8px;
   position: absolute;
@@ -823,7 +932,7 @@ select option {
   padding: 8px;
   max-width: calc(100% - 32px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-pill);
   background: var(--popover);
   box-shadow: var(--shadow-md);
 }
@@ -886,7 +995,7 @@ select option {
   height: 100%;
   padding: 0;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: none;
   font: inherit;
   cursor: pointer;
@@ -896,7 +1005,7 @@ select option {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   border: 1px solid var(--control-border);
   background: var(--card);
   object-fit: cover;
@@ -926,15 +1035,17 @@ select option {
   box-shadow: 0 0 0 2px var(--popover), 0 0 0 4px var(--foreground), 0 0 0 7px var(--ring-50);
 }
 
-/* Age chip over the thumbnail's bottom edge. White on black/65% stays
-   ≥ 7:1 even over a white thumbnail (the chip composites to #595959 or
-   darker). */
+/* Age chip inside the pill's left end (the pin sits in the right end).
+   White on black/65% stays ≥ 7:1 even over a white thumbnail (the chip
+   composites to #595959 or darker); on the active pattern it inverts to
+   black on white (21:1 / 14:1), which together with the white ring marks
+   the selection. */
 .pattern-time {
   position: absolute;
-  left: 50%;
-  bottom: 3px;
-  transform: translateX(-50%);
-  max-width: calc(100% - 6px);
+  top: 50%;
+  left: 6px;
+  transform: translateY(-50%);
+  max-width: calc(100% - 32px);
   overflow: hidden;
   padding: 1px 6px;
   border-radius: 999px;
@@ -947,6 +1058,12 @@ select option {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.pattern-item[aria-pressed='true'] .pattern-time {
+  background: var(--foreground);
+  color: var(--primary-foreground);
 }
 
 /* Pin toggle, layered over the thumbnail's top-right corner. Hidden
@@ -964,8 +1081,9 @@ select option {
    pseudo-element that merely overflows it. */
 .pattern-pin {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 50%;
+  right: 2px;
+  margin-top: -12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1012,7 +1130,7 @@ select option {
    narrow column of a wider grid) and the one-column layout below. */
 @container (max-width: 700px) {
   .pattern-bar {
-    --pattern-item-w: 60px;
+    --pattern-item-w: 64px;
     --pattern-item-h: 40px;
     --pattern-gap: 6px;
     padding: 6px;
@@ -1023,7 +1141,6 @@ select option {
   }
 
   .pattern-time {
-    bottom: 2px;
     padding: 0 5px;
     font-size: 10px;
   }
@@ -1078,10 +1195,60 @@ select option {
 }
 
 .size-inputs {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  color: var(--muted-foreground);
+}
+
+/* Name inside the field on the left, number on the right — the same
+   layout and type as the sliders' name/value. The pill boundary moves
+   from the <input> to the wrapper. */
+.input-group {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-pill);
+  background: var(--secondary);
+  box-shadow: var(--shadow-xs);
+  cursor: text;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input-group:focus-within {
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring);
+}
+
+.input-label {
+  flex: none;
+  color: var(--control-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.input-group .input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--control-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.input-group .input:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 /* ToggleGroup, variant "outline", size "sm", with spacing (separate
@@ -1180,18 +1347,17 @@ select option {
   box-shadow: var(--focus-ring);
 }
 
-/* Button, variant "default", size "lg": bg-primary
-   text-primary-foreground hover:bg-primary/90, with a second line for
-   the output summary. */
+/* Primary pill: bg-primary text-primary-foreground hover:bg-primary/90;
+   just "Экспорт <format>", no summary line (the user's call). */
 .export-btn {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
   width: 100%;
-  padding: 10px 24px;
+  height: 48px;
+  padding: 0 24px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: var(--primary);
   box-shadow: var(--shadow-xs);
   color: var(--primary-foreground);
@@ -1214,14 +1380,6 @@ select option {
 .export-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* #171717 at 80% on #e5e5e5 ≈ #3e3e3e: 9.6:1. */
-.export-meta {
-  font-size: 12px;
-  font-weight: 400;
-  opacity: 0.8;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Progress: h-2 rounded-full bg-primary/20, indicator bg-primary. */
@@ -1361,14 +1519,14 @@ select option {
   padding: 12px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-sm);
 }
 
 .result-preview {
   position: relative;
   height: 104px;
-  border-radius: var(--radius-lg);
+  border-radius: 14px;
   overflow: hidden;
   background: #000;
 }
@@ -1473,7 +1631,7 @@ select option {
   }
 
   .pattern-bar {
-    --pattern-item-w: 60px;
+    --pattern-item-w: 64px;
     --pattern-item-h: 40px;
     --pattern-gap: 6px;
     bottom: 10px;
@@ -1485,7 +1643,6 @@ select option {
   }
 
   .pattern-time {
-    bottom: 2px;
     padding: 0 5px;
     font-size: 10px;
   }
@@ -1549,7 +1706,7 @@ select option {
   padding: 24px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-sm);
   text-align: center;
 }

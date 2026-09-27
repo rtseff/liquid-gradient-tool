@@ -22,7 +22,7 @@
       <div class="controls-row">
         <div class="card">
           <div class="card-header">
-            <h2>Цвета (<span id="colorCount"></span>)</h2>
+            <h2>Цвета <span id="colorCount" class="card-meta"></span></h2>
             <div class="header-actions">
               <button id="undoColorBtn" class="icon-btn" type="button" title="Отменить (Ctrl+Z)" aria-label="Отменить" disabled>↶</button>
               <button id="redoColorBtn" class="icon-btn" type="button" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить" disabled>↷</button>
@@ -40,21 +40,29 @@
           </div>
           <div class="sliders">
             <label class="slider">
-              <span class="slider-labels">Масштаб узора <output id="scaleOut"></output></span>
-              <input id="scale" type="range" min="0.6" max="5" step="0.05" />
+              <span class="slider-control">
+                <input id="scale" type="range" min="0.6" max="5" step="0.05" />
+                <span class="slider-track"><span class="slider-name">Масштаб узора</span><output id="scaleOut"></output></span>
+              </span>
             </label>
             <label class="slider">
-              <span class="slider-labels">Искажение (Liquid) <output id="warpOut"></output></span>
-              <input id="warp" type="range" min="0" max="2.5" step="0.05" />
+              <span class="slider-control">
+                <input id="warp" type="range" min="0" max="2.5" step="0.05" />
+                <span class="slider-track"><span class="slider-name">Искажение (Liquid)</span><output id="warpOut"></output></span>
+              </span>
             </label>
             <label class="slider">
-              <span class="slider-labels">Баланс цветов <output id="softnessOut"></output></span>
-              <input id="softness" type="range" min="0" max="1" step="0.01" />
+              <span class="slider-control">
+                <input id="softness" type="range" min="0" max="1" step="0.01" />
+                <span class="slider-track"><span class="slider-name">Баланс цветов</span><output id="softnessOut"></output></span>
+              </span>
               <small class="range-legend"><span>Больше первых</span><span>Больше последних</span></small>
             </label>
             <label class="slider">
-              <span class="slider-labels">Скорость движения <output id="speedOut"></output></span>
-              <input id="speed" type="range" min="0" max="1" step="0.01" />
+              <span class="slider-control">
+                <input id="speed" type="range" min="0" max="1" step="0.01" />
+                <span class="slider-track"><span class="slider-name">Скорость движения</span><output id="speedOut"></output></span>
+              </span>
             </label>
           </div>
         </div>
@@ -72,24 +80,34 @@
           </div>
           <div id="grainSliders" class="sliders" hidden>
             <label class="slider">
-              <span class="slider-labels">Размер <output id="grainSizeOut"></output></span>
-              <input id="grainSize" type="range" min="1" max="8" step="1" />
+              <span class="slider-control">
+                <input id="grainSize" type="range" min="1" max="8" step="1" />
+                <span class="slider-track"><span class="slider-name">Размер</span><output id="grainSizeOut"></output></span>
+              </span>
             </label>
             <label class="slider">
-              <span class="slider-labels">Плотность <output id="grainDensityOut"></output></span>
-              <input id="grainDensity" type="range" min="0.02" max="1" step="0.01" />
+              <span class="slider-control">
+                <input id="grainDensity" type="range" min="0.02" max="1" step="0.01" />
+                <span class="slider-track"><span class="slider-name">Плотность</span><output id="grainDensityOut"></output></span>
+              </span>
             </label>
             <label class="slider">
-              <span class="slider-labels">Непрозрачность <output id="grainOpacityOut"></output></span>
-              <input id="grainOpacity" type="range" min="0.02" max="1" step="0.01" />
+              <span class="slider-control">
+                <input id="grainOpacity" type="range" min="0.02" max="1" step="0.01" />
+                <span class="slider-track"><span class="slider-name">Непрозрачность</span><output id="grainOpacityOut"></output></span>
+              </span>
             </label>
             <label class="slider">
-              <span class="slider-labels">Разброс яркости <output id="grainVarianceOut"></output></span>
-              <input id="grainVariance" type="range" min="0" max="1" step="0.01" />
+              <span class="slider-control">
+                <input id="grainVariance" type="range" min="0" max="1" step="0.01" />
+                <span class="slider-track"><span class="slider-name">Разброс яркости</span><output id="grainVarianceOut"></output></span>
+              </span>
             </label>
             <label class="slider" id="grainSoftnessField">
-              <span class="slider-labels">Мягкость края <output id="grainSoftnessOut"></output></span>
-              <input id="grainSoftness" type="range" min="0" max="1" step="0.01" />
+              <span class="slider-control">
+                <input id="grainSoftness" type="range" min="0" max="1" step="0.01" />
+                <span class="slider-track"><span class="slider-name">Мягкость края</span><output id="grainSoftnessOut"></output></span>
+              </span>
             </label>
           </div>
         </div>
@@ -147,11 +165,15 @@
     <section class="card output" aria-label="Экспорт">
       <div class="output-settings">
         <div class="field">
-          <span class="field-label" id="sizeLabel">Ширина × высота</span>
-          <div class="size-inputs" role="group" aria-labelledby="sizeLabel">
-            <input id="customWidth" class="input" type="number" min="64" max="3840" step="2" aria-label="Ширина" />
-            <span aria-hidden="true">×</span>
-            <input id="customHeight" class="input" type="number" min="64" max="3840" step="2" aria-label="Высота" />
+          <div class="size-inputs" role="group" aria-label="Размер кадра">
+            <label class="input-group">
+              <span class="input-label">Ширина</span>
+              <input id="customWidth" class="input" type="number" min="64" max="3840" step="2" />
+            </label>
+            <label class="input-group">
+              <span class="input-label">Высота</span>
+              <input id="customHeight" class="input" type="number" min="64" max="3840" step="2" />
+            </label>
           </div>
           <div class="size-presets" role="group" aria-label="Готовые размеры">
             <button type="button" class="size-preset-btn" data-w="1920" data-h="1080" aria-pressed="false">1920×1080</button>
@@ -192,12 +214,16 @@
         </div>
 
         <label class="slider slider-compact" id="bitrateField">
-          <span class="slider-labels">Битрейт видео <output id="bitrateOut"></output></span>
-          <input id="bitrate" type="range" min="0.5" max="10" step="0.5" />
+          <span class="slider-control">
+            <input id="bitrate" type="range" min="0.5" max="10" step="0.5" />
+            <span class="slider-track"><span class="slider-name">Битрейт видео</span><output id="bitrateOut"></output></span>
+          </span>
         </label>
         <label class="slider slider-compact" id="gifWidthField">
-          <span class="slider-labels">Ширина GIF <output id="gifWidthOut"></output></span>
-          <input id="gifWidth" type="range" min="240" max="960" step="20" />
+          <span class="slider-control">
+            <input id="gifWidth" type="range" min="240" max="960" step="20" />
+            <span class="slider-track"><span class="slider-name">Ширина GIF</span><output id="gifWidthOut"></output></span>
+          </span>
         </label>
 
         <label class="checkbox-field" id="posterField">
@@ -220,7 +246,6 @@
 
       <button id="exportBtn" class="export-btn" type="button">
         <span id="exportLabel">Экспорт</span>
-        <small id="exportMeta" class="export-meta"></small>
       </button>
 
       <div id="exportProgress" class="progress" hidden>
