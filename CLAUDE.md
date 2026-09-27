@@ -73,6 +73,15 @@ for exactly that reason.
 
 ## Architecture
 
+- **Favicon** — `favicon.svg` (the user's "L" in a circle; the L is a
+  cut-out). The tab strip follows the browser/OS theme, not the page,
+  so the SVG switches fill with `prefers-color-scheme`: #C5C5C5 on dark
+  strips (7.0–9.3:1), #3D3D3D on light ones (8.3–10.9:1).
+  `favicon-32.png` / `favicon-180.png` (apple-touch) are the fallback
+  for browsers without SVG favicons, rendered from the same path in
+  #808080 — ≥ 3:1 on both dark and light strips. Regenerate them from
+  the SVG (e.g. a Playwright screenshot with `omitBackground`) if the
+  path changes.
 - **`src/boot.js`** — the entry point. Touch-first devices
   (`(hover: none) and (pointer: coarse)`: phones, tablets) get a
   "desktop only" banner (`.desktop-only`, swapped in by the same media
