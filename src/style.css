@@ -739,17 +739,6 @@ input[type='range']:disabled {
   min-width: 0;
 }
 
-/* Label: text-sm font-medium leading-none. */
-.field-label {
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.25;
-  color: var(--foreground);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* Input / SelectTrigger: h-9 rounded-md border bg-input/30 px-3 text-sm
    shadow-xs, focus-visible:border-ring + 3px ring-ring/50. */
 .input,
@@ -783,6 +772,50 @@ select:focus-visible {
 .select-wrap {
   position: relative;
   display: block;
+}
+
+/* Name inside the control on the left, like the sliders; the chosen
+   value is right-aligned before the ▾. Shared by the selects and the
+   grain color row. */
+.select-label {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  z-index: 1;
+  transform: translateY(-50%);
+  color: var(--control-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.select-wrap select {
+  color: var(--control-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  text-align-last: right;
+}
+
+.select-wrap select option {
+  text-align: left;
+}
+
+/* In a flex row (grain color) the label is a normal item that pushes
+   the swatch, hex and ✕ to the right. */
+.color-row-labeled .select-label {
+  position: static;
+  transform: none;
+  margin-right: auto;
+}
+
+.color-row-labeled .color-hex {
+  flex: none;
+  width: 8ch;
+  color: var(--control-text);
+  font-size: 13px;
 }
 
 .select-wrap::after {
@@ -1186,7 +1219,7 @@ select option {
 .output-settings {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
 /* Sits under #formatHint as a link-styled action, not a full-width row. */
@@ -1278,16 +1311,6 @@ select option {
 .size-preset-btn[aria-pressed='true'] {
   background: var(--accent);
   color: var(--accent-foreground);
-}
-
-.field-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.field-format {
-  width: 100%;
 }
 
 /* Checkbox: size-4 rounded-[4px] border-input bg-input/30 shadow-xs;

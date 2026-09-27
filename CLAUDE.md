@@ -329,8 +329,14 @@ for exactly that reason.
   ≥ 4.7:1 on the fill even hovered — keep the fill ≤ 14% white or
   recheck); `bindRange()` caps the name's `max-width` at the room left
   of the value. Values "roll" per changed character (`setRollingText`,
-  off under `prefers-reduced-motion`). Width/height use the same idea:
-  `.input-group` pills with the name inside. The export button shows
+  off under `prefers-reduced-motion`). **Every control has its name
+  inside** — no labels above fields: width/height are `.input-group`
+  pills; selects put a `.select-label` in `.select-wrap` with the value
+  right-aligned (`text-align-last: right`); the grain color row
+  (`.color-row-labeled`) has it as the first flex item. So duration and
+  FPS are full-width rows (side by side, "Длина цикла, с" + value + ▾
+  doesn't fit half the 332px card), and the blend select is labelled
+  "Наложение" ("Режим наложения" leaves 60px for "Мягкий свет", 93px). The export button shows
   only "Экспорт <format>" — the size/weight summary line was removed at
   the user's request.
 - **UI layout** follows the Figma mock (file `crJpeY2AsxP794ZHPIIQwd`,

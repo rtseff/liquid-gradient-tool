@@ -114,8 +114,8 @@
 
         <div id="grainSide" class="grain-side" hidden>
           <label class="field">
-            <span class="field-label">Режим наложения</span>
             <span class="select-wrap">
+              <span class="select-label">Наложение</span>
               <select id="grainBlend">
                 <option value="normal">Обычный</option>
                 <option value="overlay">Перекрытие</option>
@@ -123,22 +123,20 @@
               </select>
             </span>
           </label>
-          <div class="field">
-            <span class="field-label">Цвет зерна</span>
-            <div class="color-row">
-              <input id="grainColor" type="color" class="color-input" aria-label="Выбрать цвет зерна" />
-              <input
-                id="grainColorHex"
-                type="text"
-                class="color-hex"
-                maxlength="7"
-                spellcheck="false"
-                autocomplete="off"
-                placeholder="#RRGGBB"
-                aria-label="HEX-код цвета зерна"
-              />
-              <button id="grainColorReset" type="button" class="icon-btn icon-btn-muted" title="Сбросить цвет" aria-label="Сбросить цвет зерна">✕</button>
-            </div>
+          <div class="color-row color-row-labeled">
+            <span class="select-label">Цвет зерна</span>
+            <input id="grainColor" type="color" class="color-input" aria-label="Выбрать цвет зерна" />
+            <input
+              id="grainColorHex"
+              type="text"
+              class="color-hex"
+              maxlength="7"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="#RRGGBB"
+              aria-label="HEX-код цвета зерна"
+            />
+            <button id="grainColorReset" type="button" class="icon-btn icon-btn-muted" title="Сбросить цвет" aria-label="Сбросить цвет зерна">✕</button>
           </div>
           <p class="hint">Зерно меняется каждый кадр, цикл остаётся бесшовным. Размер — в пикселях итогового файла. Анимированный шум сжимается хуже всего: при низком битрейте поднимите битрейт видео.</p>
         </div>
@@ -183,35 +181,33 @@
           </div>
         </div>
 
-        <div class="field-pair">
-          <label class="field">
-            <span class="field-label">Длина цикла, с</span>
-            <span class="select-wrap">
-              <select id="duration">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-                <option value="9">9</option>
-                <option value="10">10</option>
-              </select>
-            </span>
-          </label>
-          <label class="field">
-            <span class="field-label">FPS</span>
-            <span class="select-wrap">
-              <select id="fps">
-                <option value="24">24</option>
-                <option value="30" selected>30</option>
-                <option value="60">60</option>
-              </select>
-            </span>
-          </label>
-        </div>
+        <label class="field">
+          <span class="select-wrap">
+            <span class="select-label">Длина цикла, с</span>
+            <select id="duration">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+            </select>
+          </span>
+        </label>
+        <label class="field">
+          <span class="select-wrap">
+            <span class="select-label">FPS</span>
+            <select id="fps">
+              <option value="24">24</option>
+              <option value="30" selected>30</option>
+              <option value="60">60</option>
+            </select>
+          </span>
+        </label>
 
         <label class="slider slider-compact" id="bitrateField">
           <span class="slider-control">
@@ -231,9 +227,9 @@
           <span>PNG-постер (первый кадр)</span>
         </label>
 
-        <label class="field field-format">
-          <span class="field-label">Формат</span>
+        <label class="field">
           <span class="select-wrap">
+            <span class="select-label">Формат</span>
             <select id="format">
               <option value="webm+mp4">WebM + MP4</option>
               <option value="webm">WebM (VP9)</option>
